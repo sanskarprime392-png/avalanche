@@ -1,0 +1,33 @@
+# Data lives in Google Drive, never in git
+data/
+*.tif
+*.tiff
+*.nc
+*.zip
+*.shp
+*.dbf
+*.shx
+*.prj
+*.gpkg
+*.geojson
+
+# Extracted paper text (copyrighted) + PDFs
+_paper_text.txt
+*.pdf
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Credentials / secrets — NEVER commit
+.env
+*.env
+secrets*.json
+*credential*
+*token*
+
+# Local tooling / OS
+.claude/
+.DS_Store
+Thumbs.db
