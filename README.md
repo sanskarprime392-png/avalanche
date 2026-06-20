@@ -87,8 +87,9 @@ avalanche/
 │   ├── sampling.py               # presence declustering + terrain-matched absences + blocks
 │   └── verify.py                 # tier A/B/C verification + active-learning queue
 ├── features/
-│   ├── terrain.py                # LOCAL terrain+hydrology derivatives from DEM (WhiteboxTools/pysheds)
-│   ├── distances.py              # distance-to-road/stream/lineament from vectors
+│   ├── reproject.py              # warp raw 4326 GEE exports -> UTM 43N (EPSG:32643), metres
+│   ├── terrain.py                # LOCAL terrain+hydrology derivatives from DEM (WhiteboxTools)
+│   ├── distances.py              # dist-to-road/stream (OSMnx) + dist-to-lineament (GEM faults)
 │   └── patches.py                # cut spatially-blocked, non-overlapping patches from mosaics
 ├── models/
 │   ├── tabular.py                # RF / XGBoost / LightGBM / CatBoost + spatial-CV harness
