@@ -27,8 +27,18 @@ from scipy.ndimage import distance_transform_edt
 import geopandas as gpd
 
 
-def _osm_features(bbox_wsen, tags, retries=4):
-    """OSM features for (west,south,east,north) in 4326. Robust to OSMnx 1.x/2.x + Overpass timeouts."""
+# Public Overpass mirrors — tried in order, so a dead/overloaded main server is bypassed.
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
+
+
+def _osm_features(bbox_wsen, tags, retries=2):
+    """OSM features for (west,south,east,north) in 4326. Cycles Overpass mirrors; robust to
+    OSMnx 1.x/2.x and to the main server being down/refusing connections."""
     import osmnx as ox
     for attr, val in [("requests_timeout", 300), ("timeout", 300), ("overpass_rate_limit", True)]:
         try:
@@ -37,16 +47,23 @@ def _osm_features(bbox_wsen, tags, retries=4):
             pass
     w, s, e, n = bbox_wsen
     last = None
-    for i in range(retries):
-        try:
+    for ep in OVERPASS_ENDPOINTS:
+        try:                                  # OSMnx 2.x uses overpass_url; 1.x uses overpass_endpoint
+            ox.settings.overpass_url = ep
+            ox.settings.overpass_endpoint = ep.rsplit("/", 1)[0]
+        except Exception:
+            pass
+        host = ep.split("//")[1].split("/")[0]
+        for i in range(retries):
             try:
-                return ox.features_from_bbox(bbox=(w, s, e, n), tags=tags)        # OSMnx >= 2.0
-            except TypeError:
-                return ox.features_from_bbox(north=n, south=s, east=e, west=w, tags=tags)  # 1.x
-        except Exception as ex:
-            last = ex
-            print(f"  OSM query failed (attempt {i+1}/{retries}): {type(ex).__name__} — retrying...")
-            time.sleep(5 * (i + 1))
+                try:
+                    return ox.features_from_bbox(bbox=(w, s, e, n), tags=tags)        # OSMnx >= 2.0
+                except TypeError:
+                    return ox.features_from_bbox(north=n, south=s, east=e, west=w, tags=tags)  # 1.x
+            except Exception as ex:
+                last = ex
+                print(f"  {host} attempt {i+1}/{retries} failed: {type(ex).__name__} — trying next...")
+                time.sleep(3 * (i + 1))
     raise last
 
 
