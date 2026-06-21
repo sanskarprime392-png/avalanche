@@ -43,8 +43,10 @@ def _read(path):
 
 
 def _write(path, arr, profile):
-    profile = profile.copy()
-    profile.update(dtype="float32", count=1, nodata=np.nan)
+    profile = dict(profile)
+    profile.update(dtype="float32", count=1, nodata=np.nan, tiled=False)
+    profile.pop("blockxsize", None)
+    profile.pop("blockysize", None)
     with rasterio.open(path, "w", **profile) as dst:
         dst.write(arr.astype("float32"), 1)
 
