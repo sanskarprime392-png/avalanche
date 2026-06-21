@@ -33,7 +33,7 @@ HYDRO = ["twi", "spi"]
 def _wbt(work_dir):
     wbt = whitebox.WhiteboxTools()
     wbt.set_working_dir(work_dir)
-    wbt.set_verbose_mode(False)
+    wbt.set_verbose_mode(True)   # show per-tool progress (these steps are slow on big DEMs)
     return wbt
 
 
@@ -66,9 +66,10 @@ def compute_terrain(dem_path, out_dir, stream_threshold=100.0, tpi_window=11):
     dem = os.path.abspath(dem_path)
     out = lambda n: os.path.join(out_dir, n + ".tif")
 
-    # 0) hydrologically condition the DEM (breach preserves flow paths better than fill)
+    # 0) hydrologically condition the DEM. Fast breaching (Lindsay 2016) — least-cost breaching
+    #    is far slower on large DEMs and not worth it here.
     filled = os.path.join(out_dir, "_dem_breached.tif")
-    wbt.breach_depressions_least_cost(dem, filled, dist=100)
+    wbt.breach_depressions(dem, filled)
 
     # 1) WhiteboxTools primary derivatives
     wbt.slope(dem, out("slope"), units="degrees")
