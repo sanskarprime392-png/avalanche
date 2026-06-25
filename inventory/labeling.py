@@ -54,17 +54,21 @@ def build_label_map(ref_window, act_window, s2_window, orbit="DESCENDING",
 
 
 def _drawn_points(m):
-    """Return [(lon,lat), ...] for Point features drawn on the map (robust across geemap versions)."""
-    import ee
-    feats = getattr(m, "draw_features", None)
-    if not feats:
-        feats = getattr(m, "user_rois", None)
-    if not feats:
-        return []
-    info = ee.FeatureCollection(feats).getInfo()
+    """Return [(lon,lat), ...] for Point markers drawn on the map.
+
+    Reads the ipyleaflet DrawControl's .data (GeoJSON of everything drawn) directly — robust across
+    geemap versions and no server round-trip. (m.draw_features / user_rois aren't populated in all
+    versions, so we go to the control itself.)"""
+    dc = getattr(m, "draw_control", None) or getattr(m, "_draw_control", None)
+    data = getattr(dc, "data", None)
+    if not data:
+        for c in getattr(m, "controls", []):
+            if c.__class__.__name__ == "DrawControl":
+                data = getattr(c, "data", None)
+                break
     pts = []
-    for f in info.get("features", []):
-        g = f.get("geometry") or {}
+    for f in (data or []):
+        g = (f or {}).get("geometry") or {}
         if g.get("type") == "Point":
             lon, lat = g["coordinates"][:2]
             pts.append((lon, lat))
