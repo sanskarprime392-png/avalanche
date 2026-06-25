@@ -84,6 +84,7 @@ avalanche/
 │   ├── export_base_layers.py     # GEE-native base rasters (DEM, climate, LULC, SCD)
 │   └── export_patch_mosaics.py   # Phase 3: aligned multi-channel COG mosaics
 ├── inventory/
+│   ├── labeling.py               # SAR-assisted manual labelling (geemap markers -> tiered CSV)
 │   ├── sampling.py               # presence declustering + terrain-matched absences + blocks
 │   └── verify.py                 # tier A/B/C verification + active-learning queue
 ├── features/

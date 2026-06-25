@@ -1,0 +1,102 @@
+"""
+inventory/labeling.py — SAR-assisted manual avalanche labelling.
+
+Builds an interactive map (high-res satellite + Sentinel-2 for the event + SAR debris hotspots +
+release terrain) and lets you drop markers on avalanches you can SEE in the optical. The SAR
+hotspots are only *attention guides* — you confirm visually, so imperfect detection is fine.
+Marked points append to a tiered inventory CSV in Drive (deduped).
+
+Workflow (Colab):
+    from inventory.labeling import build_label_map, save_marks, inventory_summary
+    m = build_label_map(ref_window=("2022-12-01","2023-02-25"),
+                        act_window=("2023-03-08","2023-03-28"),
+                        s2_window=("2023-03-01","2023-04-20"))
+    m                                   # pan, zoom, drop markers with the marker tool
+    # ...in a new cell after marking...
+    INV = "/content/drive/MyDrive/avalanche/data/raw/labels/inventory.csv"
+    save_marks(m, event="2023-03", out_csv=INV)     # tier A (optically confirmed) by default
+    inventory_summary(INV)
+"""
+import os
+import datetime
+
+
+def build_label_map(ref_window, act_window, s2_window, orbit="DESCENDING",
+                    aoi_bbox=(76.40, 31.90, 78.10, 33.20), center=(32.4, 77.25), zoom=11):
+    import ee
+    import geemap
+    AOI = ee.Geometry.Rectangle(list(aoi_bbox))
+
+    def s1_median(a, b):
+        col = (ee.ImageCollection("COPERNICUS/S1_GRD").filterBounds(AOI).filterDate(a, b)
+               .filter(ee.Filter.eq("instrumentMode", "IW"))
+               .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"))
+               .filter(ee.Filter.eq("orbitProperties_pass", orbit)).select(["VV", "VH"]))
+        return col.median()
+
+    change = s1_median(*act_window).subtract(s1_median(*ref_window)).focal_median(50, "circle", "meters")
+    slope = ee.Terrain.slope(ee.Image("NASA/NASADEM_HGT/001").select("elevation"))
+    hotspot = (change.select("VH").gt(2).And(change.select("VV").gt(1))
+               .And(slope.gte(25)).And(slope.lte(55)))
+    hotspot = hotspot.selfMask().connectedPixelCount(50, True).gte(10).selfMask()
+    release = slope.gte(30).And(slope.lte(50)).selfMask()
+    s2 = (ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED").filterBounds(AOI).filterDate(*s2_window)
+          .filterMetadata("CLOUDY_PIXEL_PERCENTAGE", "less_than", 25).median())
+
+    m = geemap.Map(center=list(center), zoom=zoom)
+    m.add_basemap("SATELLITE")                                                    # Google high-res
+    m.addLayer(s2, {"bands": ["B4", "B3", "B2"], "min": 0, "max": 3000}, "Sentinel-2 (event)")
+    m.addLayer(release, {"palette": ["#00e5ff"]}, "Release terrain 30-50°", True, 0.20)
+    m.addLayer(hotspot, {"palette": ["#ff1744"]}, "SAR debris hotspots", True, 0.85)
+    print("Drop markers (marker tool, left toolbar) on avalanches you can SEE in the optical, "
+          "then run save_marks(m, event=..., out_csv=...).")
+    return m
+
+
+def _drawn_points(m):
+    """Return [(lon,lat), ...] for Point features drawn on the map (robust across geemap versions)."""
+    import ee
+    feats = getattr(m, "draw_features", None)
+    if not feats:
+        feats = getattr(m, "user_rois", None)
+    if not feats:
+        return []
+    info = ee.FeatureCollection(feats).getInfo()
+    pts = []
+    for f in info.get("features", []):
+        g = f.get("geometry") or {}
+        if g.get("type") == "Point":
+            lon, lat = g["coordinates"][:2]
+            pts.append((lon, lat))
+    return pts
+
+
+def save_marks(m, event, out_csv, tier="A", zone="release"):
+    """Append drawn avalanche markers to the inventory CSV (deduped on ~11 m rounded coords)."""
+    import pandas as pd
+    pts = _drawn_points(m)
+    if not pts:
+        print("no Point markers found — draw with the marker tool first")
+        return
+    now = datetime.datetime.utcnow().isoformat(timespec="seconds")
+    new = pd.DataFrame([dict(lon=round(lo, 6), lat=round(la, 6), event=event,
+                             tier=tier, zone=zone, added=now) for lo, la in pts])
+    os.makedirs(os.path.dirname(out_csv), exist_ok=True)
+    df = pd.concat([pd.read_csv(out_csv), new], ignore_index=True) if os.path.exists(out_csv) else new
+    df["_k"] = df.lon.round(4).astype(str) + "_" + df.lat.round(4).astype(str)
+    df = df.drop_duplicates("_k", keep="first").drop(columns="_k")
+    df.to_csv(out_csv, index=False)
+    print(f"saved {len(new)} marker(s); inventory now {len(df)} unique points -> {out_csv}")
+
+
+def inventory_summary(out_csv):
+    import pandas as pd
+    if not os.path.exists(out_csv):
+        print("no inventory yet")
+        return
+    df = pd.read_csv(out_csv)
+    print(f"{len(df)} avalanche points total")
+    if "event" in df:
+        print("by event:", df["event"].value_counts().to_dict())
+    if "tier" in df:
+        print("by tier :", df["tier"].value_counts().to_dict())
