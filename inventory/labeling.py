@@ -48,9 +48,29 @@ def build_label_map(ref_window, act_window, s2_window, orbit="DESCENDING",
     m.addLayer(s2, {"bands": ["B4", "B3", "B2"], "min": 0, "max": 3000}, "Sentinel-2 (event)")
     m.addLayer(release, {"palette": ["#00e5ff"]}, "Release terrain 30-50°", True, 0.20)
     m.addLayer(hotspot, {"palette": ["#ff1744"]}, "SAR debris hotspots", True, 0.85)
-    print("Drop markers (marker tool, left toolbar) on avalanches you can SEE in the optical, "
-          "then run save_marks(m, event=..., out_csv=...).")
+    print("Map ready. Run arm_click_capture(m), then CLICK avalanches you can SEE in the optical "
+          "(a pin drops per click), then save_marks(m, event=..., out_csv=...).")
     return m
+
+
+def arm_click_capture(m):
+    """Attach a click handler so each map click drops a pin and records (lon,lat). Returns the list.
+    Use this in Colab — the draw-tool geometry often fails to sync back to Python there, but plain
+    click interactions come through fine."""
+    from ipyleaflet import Marker
+    clicks = []
+
+    def _cap(**kw):
+        if kw.get("type") == "click" and kw.get("coordinates"):
+            lat, lon = kw["coordinates"]
+            clicks.append((lon, lat))
+            m.add_layer(Marker(location=(lat, lon), draggable=False))
+            print(f"  ✓ #{len(clicks)}: lon={lon:.5f}, lat={lat:.5f}")
+
+    m.on_interaction(_cap)
+    m._avalanche_clicks = clicks
+    print("Armed ✅  click avalanches on the map; each drops a pin and is recorded.")
+    return clicks
 
 
 def _drawn_points(m):
@@ -75,12 +95,15 @@ def _drawn_points(m):
     return pts
 
 
-def save_marks(m, event, out_csv, tier="A", zone="release"):
-    """Append drawn avalanche markers to the inventory CSV (deduped on ~11 m rounded coords)."""
+def save_marks(m, event, out_csv, tier="A", zone="release", clicks=None):
+    """Append captured avalanche markers to the inventory CSV (deduped on ~11 m rounded coords).
+    Reads clicks from arm_click_capture (Colab-robust); falls back to the draw control."""
     import pandas as pd
-    pts = _drawn_points(m)
+    pts = clicks if clicks is not None else getattr(m, "_avalanche_clicks", None)
     if not pts:
-        print("no Point markers found — draw with the marker tool first")
+        pts = _drawn_points(m)
+    if not pts:
+        print("no markers captured — run arm_click_capture(m) and click avalanches first")
         return
     now = datetime.datetime.utcnow().isoformat(timespec="seconds")
     new = pd.DataFrame([dict(lon=round(lo, 6), lat=round(la, 6), event=event,
