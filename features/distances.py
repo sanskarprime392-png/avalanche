@@ -107,7 +107,14 @@ def compute_distances(ref_tif, out_dir, gem_faults_path):
         _write(path, _distance_m(list(gdf.geometry), transform, shape, px), profile)
         print(f"wrote {name}  ({len(gdf)} features)")
 
+    fb = 1.5   # deg buffer — distance-to-nearest-fault needs faults beyond the exact AOI box,
+               # else regions with no fault inside the box come out all-NaN.
+    def _faults():
+        g = gpd.read_file(gem_faults_path, bbox=(w - fb, s - fb, e + fb, n + fb))
+        print(f"  GEM faults within buffered AOI: {len(g)}")
+        return g
+
     emit("dist_to_road.tif",      lambda: _osm_features((w, s, e, n), {"highway": True}))
     emit("dist_to_stream.tif",    lambda: _osm_features((w, s, e, n), {"waterway": True}))
-    emit("dist_to_lineament.tif", lambda: gpd.read_file(gem_faults_path, bbox=(w, s, e, n)))
+    emit("dist_to_lineament.tif", _faults)
     print("\ndistance factors ->", out_dir)

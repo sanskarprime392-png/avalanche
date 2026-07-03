@@ -51,14 +51,35 @@ def _write(path, arr, profile):
         dst.write(arr.astype("float32"), 1)
 
 
+def _nanfocal_std(a, size=3):
+    """Focal std-dev that ignores NaN neighbours (so it doesn't blank out near no-data)."""
+    m = np.isfinite(a).astype("float32")
+    a0 = np.where(m > 0, a, 0.0)
+    cnt = uniform_filter(m, size) * size * size
+    s1 = uniform_filter(a0, size) * size * size
+    s2 = uniform_filter(a0 * a0, size) * size * size
+    with np.errstate(invalid="ignore", divide="ignore"):
+        var = s2 / cnt - (s1 / cnt) ** 2
+    std = np.sqrt(np.clip(var, 0, None)).astype("float32")
+    std[cnt < 1] = np.nan
+    return std
+
+
 def _vrm(slope_deg, aspect_deg, window=3):
-    """Sappington (2007) Vector Ruggedness Measure from slope & aspect."""
+    """Sappington (2007) Vector Ruggedness Measure, NaN-aware (ignores NaN neighbours)."""
     s, a = np.deg2rad(slope_deg), np.deg2rad(aspect_deg)
     x, y, z = np.sin(s) * np.sin(a), np.sin(s) * np.cos(a), np.cos(s)
-    n = window * window
-    sx, sy, sz = (uniform_filter(v, window) * n for v in (x, y, z))
-    r = np.sqrt(sx**2 + sy**2 + sz**2)
-    return 1.0 - r / n
+    m = np.isfinite(x).astype("float32")
+    n = uniform_filter(m, window) * window * window
+
+    def fs(v):
+        return uniform_filter(np.where(np.isfinite(v), v, 0.0), window) * window * window
+
+    r = np.sqrt(fs(x) ** 2 + fs(y) ** 2 + fs(z) ** 2)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        vrm = (1.0 - r / n).astype("float32")
+    vrm[n < 1] = np.nan
+    return vrm
 
 
 def compute_terrain(dem_path, out_dir, stream_threshold=100.0, tpi_window=11):
@@ -90,9 +111,7 @@ def compute_terrain(dem_path, out_dir, stream_threshold=100.0, tpi_window=11):
     _write(out("vrm"), _vrm(slope, aspect), prof)
 
     elev, _ = _read(dem)
-    mean = uniform_filter(elev, 3)
-    roughness = np.sqrt(np.clip(uniform_filter(elev**2, 3) - mean**2, 0, None))  # focal std of elev
-    _write(out("roughness"), roughness, prof)
+    _write(out("roughness"), _nanfocal_std(elev, 3), prof)   # focal std of elevation (NaN-aware)
 
     # 3) hydrology: D-infinity flow accumulation -> TWI, SPI, valley depth
     sca = os.path.join(out_dir, "_sca.tif")

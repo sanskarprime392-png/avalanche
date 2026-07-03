@@ -156,8 +156,14 @@ def build_training_table(inv_csv, proc_dir, out_csv, n_ratio=1.0, buffer_m=1000.
     feats = sample_rasters(all_xy, rasters)
     df = pd.concat([meta.reset_index(drop=True), feats.reset_index(drop=True)], axis=1)
 
+    feat_cols = list(feats.columns)
+    allnan = [c for c in feat_cols if df[c].isna().all()]
+    if allnan:                                  # a broken layer must not nuke every row
+        print(f"  ! all-NaN predictor(s) dropped — regenerate these: {allnan}")
+        df = df.drop(columns=allnan)
+        feat_cols = [c for c in feat_cols if c not in allnan]
     n0 = len(df)
-    df = df.dropna(subset=list(feats.columns)).reset_index(drop=True)
+    df = df.dropna(subset=feat_cols).reset_index(drop=True)
     if n0 - len(df):
         print(f"  dropped {n0 - len(df)} rows with nodata in some predictor")
 
