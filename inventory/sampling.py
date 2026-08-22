@@ -200,17 +200,21 @@ def sample_negatives_paper_style(dem_path, slope_path, lulc_path, presence_xy, n
         if s.nodata is not None:
             slope[slope == s.nodata] = np.nan
         transform = s.transform
-    with rasterio.open(lulc_path) as l:
-        lulc = l.read(1).astype("float32")
-    assert lulc.shape == slope.shape, "LULC and slope must share the same grid"
-
-    ok = np.isfinite(slope) & (slope <= max_slope) & np.isin(lulc, list(lulc_classes))
+    # land cover is exported at 10 m while terrain is 30 m, so sample it by coordinate rather
+    # than assuming a shared grid
+    ok = np.isfinite(slope) & (slope <= max_slope)
     rows, cols = np.nonzero(ok)
     if rows.size == 0:
-        raise ValueError("no paper-style absence candidates found")
+        raise ValueError("no flat candidates found")
     take = rng.choice(rows.size, size=min(n_candidates, rows.size), replace=False)
     xs, ys = transform_xy(transform, rows[take], cols[take])
     cand = np.column_stack([np.asarray(xs), np.asarray(ys)])
+
+    lulc_vals = sample_rasters(cand, {"lulc": lulc_path})["lulc"].values
+    keep = np.isin(lulc_vals, list(lulc_classes))
+    cand = cand[keep]
+    if len(cand) == 0:
+        raise ValueError("no paper-style absence candidates found")
 
     n_target = int(round(len(presence_xy) * n_ratio))
     pick = rng.choice(len(cand), size=min(n_target, len(cand)), replace=False)
