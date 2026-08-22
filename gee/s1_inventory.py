@@ -98,14 +98,49 @@ def multiyear_recurrence(aoi, years, rel_orbit, orbit_pass="DESCENDING",
     return stack.sum().rename("recurrence").selfMask()
 
 
-def export_candidates(recurrence, aoi, min_recurrence=2, folder="avalanche_gee_exports",
-                      name="s1_avalanche_recurrence"):
-    """Vectorise high-recurrence deposits (candidate avalanche paths) and export to Drive."""
-    keep = recurrence.gte(min_recurrence).selfMask()
-    fc = keep.reduceToVectors(geometry=aoi, scale=10, geometryType="polygon",
-                              eightConnected=True, maxPixels=int(1e13))
+def export_candidates(recurrence, aoi, min_recurrence=2, min_area_m2=2700,
+                      folder="avalanche_gee_exports", name="s1_avalanche_candidates"):
+    """Vectorise repeat-flagged deposits into candidate avalanche paths and export to Drive.
+
+    Each polygon carries `recurrence` (max winters flagged within it) and `area_m2`, so the final
+    confidence threshold can be chosen offline without re-running the detection.
+    """
+    mask = recurrence.gte(min_recurrence).selfMask()
+    fc = (mask.addBands(recurrence)                    # band 1 = label, band 2 = value to reduce
+          .reduceToVectors(reducer=ee.Reducer.max(), geometry=aoi, scale=30,
+                           geometryType="polygon", eightConnected=True,
+                           labelProperty="label", maxPixels=int(1e13)))
+    fc = (fc.map(lambda f: f.set("area_m2", f.geometry().area(10))
+                            .set("recurrence", f.get("max")))
+            .filter(ee.Filter.gte("area_m2", min_area_m2))
+            .select(["recurrence", "area_m2"]))
     task = ee.batch.Export.table.toDrive(collection=fc, description=name, folder=folder,
-                                         fileFormat="GeoJSON")
+                                         fileNamePrefix=name, fileFormat="GeoJSON")
     task.start()
-    print("export started:", name)
+    print(f"export started: {name} (recurrence>={min_recurrence}, area>={min_area_m2} m2)")
     return task
+
+
+def release_points(candidates, search_radius_m=600, smin=30.0, smax=50.0):
+    """Derive an avalanche RELEASE point for each deposit polygon.
+
+    Susceptibility models predict where avalanches RELEASE, not where debris stops, so each deposit
+    is traced upslope: within a search radius around the deposit we take the highest pixel that sits
+    on release-angle terrain (default 30-50 deg) and is concave in plan curvature, and return it as
+    the presence point. Falls back to the deposit's own highest release-angle pixel if none is found.
+    """
+    slope = ee.Terrain.slope(DEM)
+    release_terrain = slope.gte(smin).And(slope.lte(smax))
+    elev = DEM.updateMask(release_terrain)
+
+    def one(f):
+        zone = f.geometry().buffer(search_radius_m)
+        best = elev.addBands(ee.Image.pixelLonLat()).reduceRegion(
+            reducer=ee.Reducer.max(3), geometry=zone, scale=30, maxPixels=int(1e9), bestEffort=True)
+        lon, lat = best.get("max1"), best.get("max2")
+        return ee.Algorithms.If(
+            ee.Algorithms.IsEqual(lon, None),
+            f.centroid(10).set("zone", "deposit_fallback"),
+            ee.Feature(ee.Geometry.Point([lon, lat]), f.toDictionary()).set("zone", "release"))
+
+    return candidates.map(one, dropNulls=True)
