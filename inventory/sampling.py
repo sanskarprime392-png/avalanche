@@ -180,6 +180,45 @@ def sample_negatives(dem_path, slope_path, presence_xy, n_ratio=1.0, buffer_m=10
     return cand[np.array(chosen, int)]
 
 
+def sample_negatives_paper_style(dem_path, slope_path, lulc_path, presence_xy, n_ratio=1.0,
+                                 max_slope=15.0, n_candidates=60000, seed=42,
+                                 lulc_classes=(10, 30, 40, 50, 80)):
+    """Reproduce the ORIGINAL paper's absence rule, for the leakage-decomposition experiment.
+
+    Abhinav & Sattar drew non-avalanche points from "flat vegetated regions, non-snow-accumulated
+    areas, urban settlements, water bodies, and croplands". Those places differ from avalanche
+    terrain in almost every predictor, so a classifier can separate them by answering "is this steep
+    and snowy or flat and green?" rather than "is this an avalanche release zone?" — which inflates
+    the reported AUC. Running this alongside terrain-matched sampling isolates how much of the
+    published performance came from the sampling design.
+
+    Defaults are ESA WorldCover classes 10 tree, 30 grassland, 40 cropland, 50 built-up, 80 water.
+    """
+    rng = np.random.default_rng(seed)
+    with rasterio.open(slope_path) as s:
+        slope = s.read(1).astype("float32")
+        if s.nodata is not None:
+            slope[slope == s.nodata] = np.nan
+        transform = s.transform
+    with rasterio.open(lulc_path) as l:
+        lulc = l.read(1).astype("float32")
+    assert lulc.shape == slope.shape, "LULC and slope must share the same grid"
+
+    ok = np.isfinite(slope) & (slope <= max_slope) & np.isin(lulc, list(lulc_classes))
+    rows, cols = np.nonzero(ok)
+    if rows.size == 0:
+        raise ValueError("no paper-style absence candidates found")
+    take = rng.choice(rows.size, size=min(n_candidates, rows.size), replace=False)
+    xs, ys = transform_xy(transform, rows[take], cols[take])
+    cand = np.column_stack([np.asarray(xs), np.asarray(ys)])
+
+    n_target = int(round(len(presence_xy) * n_ratio))
+    pick = rng.choice(len(cand), size=min(n_target, len(cand)), replace=False)
+    print(f"  paper-style absences (slope<={max_slope:.0f} deg, LULC {list(lulc_classes)}): "
+          f"{len(pick)} of {len(cand)} candidates")
+    return cand[pick]
+
+
 def assign_blocks(x, y, block_m=10000.0):
     bx = np.floor(np.asarray(x) / block_m).astype(int)
     by = np.floor(np.asarray(y) / block_m).astype(int)
@@ -188,10 +227,14 @@ def assign_blocks(x, y, block_m=10000.0):
 
 def build_training_table(inv_csv, proc_dir, out_csv, n_ratio=1.0, buffer_m=1000.0,
                          block_m=10000.0, seed=42, min_recurrence=None,
-                         match_aspect=True):
-    """Build the model table. `match_aspect=True` (default) stratifies the background sample by
-    aspect as well as elevation/slope — necessary for the SAR-derived inventory so the model cannot
-    exploit the Sentinel-1 look-direction aspect bias."""
+                         match_aspect=True, negatives="matched"):
+    """Build the model table.
+
+    negatives="matched" (default) draws terrain-matched background points; with match_aspect=True
+    they also match the presence ASPECT distribution, so the model cannot exploit the Sentinel-1
+    look-direction bias. negatives="paper" reproduces the original study's flat/vegetated/urban/
+    cropland rule for the leakage-decomposition experiment.
+    """
     rasters = collect_rasters(proc_dir)
     print(f"{len(rasters)} predictor rasters: {sorted(rasters)}")
 
@@ -199,9 +242,14 @@ def build_training_table(inv_csv, proc_dir, out_csv, n_ratio=1.0, buffer_m=1000.
     p_xy = pres[["x", "y"]].values
     print(f"{len(pres)} presence points from {inv_csv}")
 
-    neg_xy = sample_negatives(rasters["elevation"], rasters["slope"], p_xy,
-                              n_ratio=n_ratio, buffer_m=buffer_m, seed=seed,
-                              aspect_path=rasters.get("aspect") if match_aspect else None)
+    if negatives == "paper":
+        neg_xy = sample_negatives_paper_style(rasters["elevation"], rasters["slope"],
+                                              rasters["esa_worldcover"], p_xy,
+                                              n_ratio=n_ratio, seed=seed)
+    else:
+        neg_xy = sample_negatives(rasters["elevation"], rasters["slope"], p_xy,
+                                  n_ratio=n_ratio, buffer_m=buffer_m, seed=seed,
+                                  aspect_path=rasters.get("aspect") if match_aspect else None)
 
     all_xy = np.vstack([p_xy, neg_xy])
     meta = pd.DataFrame({

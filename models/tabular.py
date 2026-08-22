@@ -130,6 +130,58 @@ def compare_all(df, out_dir, k=5, seed=42):
     return res
 
 
+def leakage_decomposition(inv_path, proc_dir, out_dir, model_key="rf", k=5, seed=42, **kw):
+    """The controlled decomposition experiment — the paper's headline figure.
+
+    Four configurations isolate WHERE the published performance comes from:
+
+        A  paper-style absences (flat/vegetated/urban/cropland) + random CV   <- the literature
+        B  paper-style absences                                 + spatial CV
+        C  terrain-matched background                           + random CV
+        D  terrain-matched background                           + spatial CV  <- the honest number
+
+    A->C isolates inflation from the SAMPLING design; A->B isolates inflation from spatial
+    autocorrelation (leaky random folds); D is what the model is actually worth. If A reproduces the
+    published ~0.95 while D is far lower, the published score is largely an artefact of separating
+    "steep and snowy" from "flat and green" rather than of learning avalanche release.
+    """
+    import os
+    from inventory.sampling import build_training_table
+
+    os.makedirs(out_dir, exist_ok=True)
+    tables = {}
+    for neg in ("paper", "matched"):
+        print(f"\n=== building table: {neg} absences ===")
+        tables[neg] = build_training_table(
+            inv_path, proc_dir, os.path.join(out_dir, f"table_{neg}.csv"),
+            negatives=neg, seed=seed, **kw)
+
+    rows = []
+    for cfg, neg, spatial in (("A", "paper", False), ("B", "paper", True),
+                              ("C", "matched", False), ("D", "matched", True)):
+        fold = run_cv(tables[neg], model_key, spatial=spatial, k=k, seed=seed)
+        m = fold.mean(numeric_only=True)
+        rows.append(dict(config=cfg,
+                         absences="paper (flat/veg/urban)" if neg == "paper" else "terrain-matched",
+                         cv="random" if not spatial else "spatial-block",
+                         roc_auc=m["roc_auc"], pr_auc=m["pr_auc"],
+                         accuracy=m["accuracy"], kappa=m["kappa"]))
+        print(f"  {cfg}: AUC {m['roc_auc']:.3f}  acc {m['accuracy']:.3f}")
+
+    res = pd.DataFrame(rows)
+    path = os.path.join(out_dir, "leakage_decomposition.csv")
+    res.to_csv(path, index=False)
+    print(f"\nsaved -> {path}\n")
+    print(res.round(3).to_string(index=False))
+
+    auc = {r["config"]: r["roc_auc"] for r in rows}
+    print("\ndecomposition of the optimism:")
+    print(f"  sampling design (A-C):        {auc['A'] - auc['C']:+.3f} AUC")
+    print(f"  spatial autocorrelation (A-B):{auc['A'] - auc['B']:+.3f} AUC")
+    print(f"  combined (A-D):               {auc['A'] - auc['D']:+.3f} AUC")
+    return res
+
+
 def fit_full_and_importance(df, model_key="rf", seed=42):
     """Fit on all rows; return (model, importance series) for SHAP / mapping later."""
     feats = feature_columns(df)
