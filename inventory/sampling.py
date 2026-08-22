@@ -63,8 +63,30 @@ def sample_rasters(xy, rasters):
     return pd.DataFrame(out)
 
 
-def load_presences(inv_csv):
-    df = pd.read_csv(inv_csv)
+def load_presences(inv_path, min_recurrence=None):
+    """Load avalanche presence points from either the manual CSV (lon/lat columns) or a
+    Sentinel-1 release-point GeoJSON. `min_recurrence` filters the S1 points by confidence tier."""
+    if str(inv_path).lower().endswith((".geojson", ".json")):
+        import json
+        with open(inv_path) as fh:
+            feats = json.load(fh)["features"]
+        rows = []
+        for f in feats:
+            g = f.get("geometry") or {}
+            if g.get("type") != "Point":
+                continue
+            p = f.get("properties", {}) or {}
+            lon, lat = g["coordinates"][:2]
+            rows.append(dict(lon=lon, lat=lat,
+                             recurrence=p.get("recurrence"), area_m2=p.get("area_m2"),
+                             event="s1", tier=p.get("zone", "s1")))
+        df = pd.DataFrame(rows)
+        if min_recurrence is not None and "recurrence" in df:
+            n0 = len(df)
+            df = df[df["recurrence"] >= min_recurrence].reset_index(drop=True)
+            print(f"  recurrence >= {min_recurrence}: kept {len(df)} of {n0} S1 release points")
+    else:
+        df = pd.read_csv(inv_path)
     tr = Transformer.from_crs("EPSG:4326", RASTER_CRS, always_xy=True)
     df["x"], df["y"] = tr.transform(df["lon"].values, df["lat"].values)
     return df
@@ -72,8 +94,17 @@ def load_presences(inv_csv):
 
 def sample_negatives(dem_path, slope_path, presence_xy, n_ratio=1.0, buffer_m=1000.0,
                      smin=25.0, smax=55.0, n_candidates=60000,
-                     elev_bin=250.0, slope_bin=5.0, seed=42):
-    """Terrain-matched background absences. Returns Mx2 array of UTM coords."""
+                     elev_bin=250.0, slope_bin=5.0, seed=42,
+                     aspect_path=None, aspect_bin=45.0):
+    """Terrain-matched background absences. Returns Mx2 array of UTM coords.
+
+    Matching on elevation x slope stops the classifier cheating on "steep and snowy vs flat and
+    green". Passing `aspect_path` adds ASPECT to the matching, which is required for a
+    SAR-derived inventory: Sentinel-1 detection carries a look-direction aspect bias (descending
+    over-detects SE-facing slopes, ascending over-detects NW), so unless the background carries the
+    same aspect distribution as the presences, the model can score well by learning the radar
+    artefact instead of avalanche physics.
+    """
     rng = np.random.default_rng(seed)
     with rasterio.open(slope_path) as s:
         slope = s.read(1).astype("float32")
@@ -86,28 +117,49 @@ def sample_negatives(dem_path, slope_path, presence_xy, n_ratio=1.0, buffer_m=10
             elev[elev == d.nodata] = np.nan
     assert slope.shape == elev.shape, "slope and DEM must share the same grid"
 
+    aspect = None
+    if aspect_path:
+        with rasterio.open(aspect_path) as a:
+            aspect = a.read(1).astype("float32")
+            if a.nodata is not None:
+                aspect[aspect == a.nodata] = np.nan
+
     ok = np.isfinite(slope) & np.isfinite(elev) & (slope >= smin) & (slope <= smax)
+    if aspect is not None:
+        ok &= np.isfinite(aspect)
     rows, cols = np.nonzero(ok)
     take = rng.choice(rows.size, size=min(n_candidates, rows.size), replace=False)
     r, c = rows[take], cols[take]
     xs, ys = transform_xy(transform, r, c)
     cand = np.column_stack([np.asarray(xs), np.asarray(ys)])
     cslope, celev = slope[r, c], elev[r, c]
+    casp = aspect[r, c] if aspect is not None else None
 
     # exclusion buffer around known avalanches (they are NOT reliable absences)
     dmin, _ = cKDTree(presence_xy).query(cand, k=1)
     keep = dmin > buffer_m
     cand, cslope, celev = cand[keep], cslope[keep], celev[keep]
+    if casp is not None:
+        casp = casp[keep]
     print(f"  candidates on capable terrain, outside {buffer_m:.0f} m buffer: {len(cand)}")
 
-    # presence slope/elev for distribution matching
-    p_feats = sample_rasters(presence_xy, {"slope": slope_path, "elevation": dem_path})
+    # presence terrain for distribution matching
+    pr = {"slope": slope_path, "elevation": dem_path}
+    if aspect_path:
+        pr["aspect"] = aspect_path
+    p_feats = sample_rasters(presence_xy, pr)
     p_slope, p_elev = p_feats["slope"].values, p_feats["elevation"].values
+    p_asp = p_feats["aspect"].values if aspect_path else None
 
     e_edges = np.arange(np.nanmin(elev), np.nanmax(elev) + elev_bin, elev_bin)
     s_edges = np.arange(smin, smax + slope_bin, slope_bin)
     p_bin = np.digitize(p_elev, e_edges) * 1000 + np.digitize(p_slope, s_edges)
     c_bin = np.digitize(celev, e_edges) * 1000 + np.digitize(cslope, s_edges)
+    if aspect_path:                       # third matching dimension
+        a_edges = np.arange(0, 360 + aspect_bin, aspect_bin)
+        p_bin = p_bin * 100 + np.digitize(p_asp, a_edges)
+        c_bin = c_bin * 100 + np.digitize(casp, a_edges)
+        print(f"  matching on elevation x slope x ASPECT ({aspect_bin:.0f} deg bins)")
 
     n_target = int(round(len(presence_xy) * n_ratio))
     chosen, used = [], np.zeros(len(cand), bool)
@@ -135,16 +187,21 @@ def assign_blocks(x, y, block_m=10000.0):
 
 
 def build_training_table(inv_csv, proc_dir, out_csv, n_ratio=1.0, buffer_m=1000.0,
-                         block_m=10000.0, seed=42):
+                         block_m=10000.0, seed=42, min_recurrence=None,
+                         match_aspect=True):
+    """Build the model table. `match_aspect=True` (default) stratifies the background sample by
+    aspect as well as elevation/slope — necessary for the SAR-derived inventory so the model cannot
+    exploit the Sentinel-1 look-direction aspect bias."""
     rasters = collect_rasters(proc_dir)
     print(f"{len(rasters)} predictor rasters: {sorted(rasters)}")
 
-    pres = load_presences(inv_csv)
+    pres = load_presences(inv_csv, min_recurrence=min_recurrence)
     p_xy = pres[["x", "y"]].values
     print(f"{len(pres)} presence points from {inv_csv}")
 
     neg_xy = sample_negatives(rasters["elevation"], rasters["slope"], p_xy,
-                              n_ratio=n_ratio, buffer_m=buffer_m, seed=seed)
+                              n_ratio=n_ratio, buffer_m=buffer_m, seed=seed,
+                              aspect_path=rasters.get("aspect") if match_aspect else None)
 
     all_xy = np.vstack([p_xy, neg_xy])
     meta = pd.DataFrame({
