@@ -58,9 +58,34 @@ def _composite(col):
     return comp.focal_median(40, "circle", "meters")
 
 
+def local_incidence_angle(inc_deg, orbit_pass):
+    """Terrain-corrected local incidence angle (LIA), in degrees.
+
+    Sentinel-1 is right-looking: DESCENDING (heading ~190 deg) looks WNW, ASCENDING (~350) looks
+    ENE. The formula needs the azimuth pointing FROM the target TOWARD the sensor, which is the
+    look direction reversed — ~100 deg (ESE) for descending and ~260 deg (WSW) for ascending — so
+    that slopes tilted toward the sensor correctly come out with a LOW incidence angle.
+    LIA = acos( cos(inc)cos(slope) + sin(inc)sin(slope)cos(aspect - sensor_azimuth) ).
+    Low LIA = slope tilted toward the sensor (foreshortening/layover, artificially bright and
+    change-sensitive); LIA near/above 90 = radar shadow (noise floor, spurious dB jumps). Both
+    must be masked out or the detector inherits a look-direction ASPECT BIAS - measured here as
+    SE over-representation on DESC 136 and NW on ASC 27 (see fused_recurrence docstring).
+    """
+    sensor_az = ee.Number(100 if orbit_pass == "DESCENDING" else 260)
+    slope = ee.Terrain.slope(DEM).multiply(3.14159265 / 180)
+    aspect = ee.Terrain.aspect(DEM).multiply(3.14159265 / 180)
+    inc = inc_deg.multiply(3.14159265 / 180)
+    rel_az = aspect.subtract(sensor_az.multiply(3.14159265 / 180))
+    cos_lia = (inc.cos().multiply(slope.cos())
+               .add(inc.sin().multiply(slope.sin()).multiply(rel_az.cos())))
+    return cos_lia.clamp(-1, 1).acos().multiply(180 / 3.14159265).rename("lia")
+
+
 def seasonal_deposits(aoi, rel_orbit, ref_win, act_win, orbit_pass="DESCENDING",
-                      vh_thresh=2.0, vv_cap=6.0, min_pixels=8):
-    """One winter's avalanche deposits = same-orbit backscatter INCREASE on avalanche-capable slopes."""
+                      vh_thresh=2.0, vv_cap=6.0, min_pixels=8,
+                      lia_min=30.0, lia_max=75.0):
+    """One winter's avalanche deposits = same-orbit backscatter INCREASE on avalanche-capable slopes,
+    restricted to pixels with a well-behaved local incidence angle (no layover, no shadow)."""
     ref = _composite(_s1(aoi, ref_win[0], ref_win[1], orbit_pass, rel_orbit))
     act_col = _s1(aoi, act_win[0], act_win[1], orbit_pass, rel_orbit)
     act = _composite(act_col)
@@ -68,7 +93,8 @@ def seasonal_deposits(aoi, rel_orbit, ref_win, act_win, orbit_pass="DESCENDING",
 
     slope = ee.Terrain.slope(DEM)
     angle = act_col.select("angle").mean()
-    valid = angle.gt(25).And(angle.lt(45))              # drop layover (near range) & shadow (far range)
+    lia = local_incidence_angle(angle, orbit_pass)      # terrain-corrected, not just swath position
+    valid = lia.gte(lia_min).And(lia.lte(lia_max))      # drop foreshortening/layover and shadow
 
     debris = (change.select("VH").gt(vh_thresh)         # cross-pol increase = surface roughening
               .And(change.select("VV").gt(vh_thresh - 1.0))
@@ -96,6 +122,22 @@ def multiyear_recurrence(aoi, years, rel_orbit, orbit_pass="DESCENDING",
 
     stack = ee.ImageCollection(ee.List(years).map(one_year))
     return stack.sum().rename("recurrence").selfMask()
+
+
+def fused_recurrence(aoi, years, orbits=(("DESCENDING", 136), ("ASCENDING", 27)), **kw):
+    """Recurrence fused across BOTH orbit geometries — required to remove look-direction bias.
+
+    Sentinel-1 is right-looking, so a single orbit systematically over-detects on slopes facing the
+    sensor and under-detects on slopes in radar shadow. Measured over this AOI, DESCENDING 136 peaks
+    on E/SE (34.8% SE vs 12.6% of background terrain) while ASCENDING 27 peaks on NW/W — mirror
+    images, i.e. geometry, not avalanche physics. (Only the elevated SOUTH-facing fraction is
+    consistent across both geometries and therefore real: sun-facing slopes -> spring wet-snow
+    avalanches.) Taking the per-pixel MAX across orbits lets each geometry cover the aspects the
+    other one hides, so a path counts if either orbit saw it repeatedly.
+    """
+    recs = [multiyear_recurrence(aoi, years, rel_orbit=o, orbit_pass=p, **kw).unmask(0)
+            for p, o in orbits]
+    return ee.ImageCollection(recs).max().rename("recurrence").selfMask()
 
 
 def export_candidates(recurrence, aoi, min_recurrence=2, min_area_m2=2700,
