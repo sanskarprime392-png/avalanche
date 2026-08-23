@@ -93,6 +93,42 @@ def fig_label_sensitivity():
     savefig(fig, "fig_label_sensitivity", outdir=FIGS)
 
 
+def fig_geography_ablation():
+    """Coarse climate/snow layers are replaceable by raw coordinates -> they encode location,
+    not snowpack physics."""
+    d = pd.read_csv(os.path.join(RES, "geography_ablation.csv"))
+    fig, ax = plt.subplots(figsize=(7.0, 3.7))
+    d = d.iloc[::-1]
+    y = np.arange(len(d))
+    col = [CB_PALETTE[0] if "full" in v else
+           CB_PALETTE[1] if "REPLACED" in v else CB_PALETTE[7] for v in d.variant]
+    ax.barh(y, d.roc_auc, xerr=[d.roc_auc - d.ci_low, d.ci_high - d.roc_auc],
+            color=col, error_kw=dict(lw=1, capsize=3))
+    for i, (v, a) in enumerate(zip(d.variant, d.roc_auc)):
+        ax.text(a + 0.012, i, f"{a:.3f}", va="center", fontsize=8)
+    ax.set_yticks(y)
+    ax.set_yticklabels([f"{v}  ({n})" for v, n in zip(d.variant, d.n_features)], fontsize=8)
+    ax.set_xlabel("ROC-AUC (XGBoost, spatial-block CV, 95% bootstrap CI)")
+    ax.set_xlim(0.6, 1.0)
+    ax.set_title("Coarse climate and snow predictors encode geography, not snowpack",
+                 fontsize=9.5)
+    savefig(fig, "fig_geography_ablation", outdir=FIGS)
+
+
+def fig_model_ci():
+    d = pd.read_csv(os.path.join(RES, "model_ci.csv")).sort_values("roc_auc")
+    fig, ax = plt.subplots(figsize=(6.0, 3.3))
+    y = np.arange(len(d))
+    ax.errorbar(d.roc_auc, y, xerr=[d.roc_auc - d.ci_low, d.ci_high - d.roc_auc],
+                fmt="o", color=CB_PALETTE[0], capsize=3, ms=6, lw=1.4)
+    ax.set_yticks(y)
+    ax.set_yticklabels([NICE.get(m, m) for m in d.model], fontsize=8.5)
+    ax.set_xlabel("ROC-AUC, spatial-block CV (95% bootstrap CI)")
+    ax.set_title("Model ranking with uncertainty — the two GBMs are indistinguishable",
+                 fontsize=9.5)
+    savefig(fig, "fig_model_ci", outdir=FIGS)
+
+
 def fig_roc_and_importance():
     df = pd.read_csv(os.path.join(DATA, "training_table_matched.csv"))
     feats = feature_columns(df)
@@ -137,6 +173,8 @@ if __name__ == "__main__":
     os.makedirs(FIGS, exist_ok=True)
     fig_decomposition()
     fig_label_sensitivity()
+    fig_geography_ablation()
+    fig_model_ci()
     fig_model_comparison()
     imp = fig_roc_and_importance()
     print("\ntop predictors (permutation importance, spatial fold):")
