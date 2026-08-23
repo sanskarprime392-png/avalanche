@@ -20,6 +20,20 @@ Risk is then assembled in the standard form
 
 where hazard combines release susceptibility with reachability, exposure is the building count, and
 vulnerability comes from a fragility relationship for the dominant construction type.
+
+STATUS — NOT PUBLICATION READY. Tested against 277,529 Open Buildings centroids this gives 16,917 /
+35,295 / 46,813 reachable buildings at alpha = 34 / 30 / 28 deg, against 161-557 reported by
+Abhinav & Sattar from explicit RAMMS simulation of 371 selected sources. Two reasons the numbers
+are inflated, both structural rather than parameter choices:
+
+  1. The energy line is line-of-sight. Without flow routing a building separated from a source by an
+     intervening ridge or valley still qualifies, so reach is systematically overestimated.
+  2. Taking the MAXIMUM susceptibility over the (often >100) qualifying sources saturates near 1.0,
+     which is why essentially every reachable building falls in the top hazard class. The grading is
+     an artefact of the aggregation, not a property of the terrain.
+
+Use this module for screening-level upper bounds only. Credible exposure requires routed runout —
+Flow-Py (open source, energy line WITH flow routing) or r.avaflow — which is a separate work package.
 """
 import numpy as np
 import rasterio
@@ -39,20 +53,37 @@ def load_raster(path):
         return a, s.transform, s.crs
 
 
-def reachable_hazard(sus_path, dem_path, buildings_xy, alpha_deg=22.0, max_dist_m=3000.0,
-                     sus_min=0.5):
+def reachable_hazard(sus_path, dem_path, buildings_xy, alpha_deg=28.0, max_dist_m=2000.0,
+                     sus_min=0.75, min_release_px=6):
     """For each building, the maximum release susceptibility that can physically reach it.
 
     Returns (hazard, n_sources): hazard is the highest susceptibility among release cells whose
-    energy line clears the building; n_sources counts how many such cells exist, a crude measure of
-    how many separate paths threaten the site.
+    energy line clears the building; n_sources counts how many such cells exist.
+
+    Two constraints keep this physically meaningful. `sus_min` restricts sources to the top
+    susceptibility class, and `min_release_px` requires a contiguous release patch (default 6 cells
+    ~ 5,400 m2) because a single 30 m pixel cannot generate a destructive avalanche.
+
+    IMPORTANT CAVEAT: the energy line is a line-of-sight criterion. It does not verify that a flow
+    path actually connects source to target, so a building separated from a high slope by an
+    intervening ridge or valley can still satisfy it. Results are therefore an UPPER BOUND on
+    exposure; converting them to true exposure requires flow routing (e.g. Flow-Py or r.avaflow).
     """
+    from scipy import ndimage
+
     sus, transform, _ = load_raster(sus_path)
     dem, dtr, _ = load_raster(dem_path)
     if dem.shape != sus.shape:
         raise ValueError("susceptibility and DEM must share a grid")
 
     rel = np.isfinite(sus) & (sus >= sus_min)
+    if min_release_px > 1:                      # drop isolated cells: no release area, no avalanche
+        lab, n = ndimage.label(rel)
+        sizes = np.bincount(lab.ravel())
+        keep = np.isin(lab, np.nonzero(sizes >= min_release_px)[0][1:])
+        print(f"  release patches >= {min_release_px} px: "
+              f"{int(keep.sum()):,} cells kept of {int(rel.sum()):,}")
+        rel = keep
     rr, cc = np.nonzero(rel)
     if rr.size == 0:
         return np.zeros(len(buildings_xy)), np.zeros(len(buildings_xy), int)
