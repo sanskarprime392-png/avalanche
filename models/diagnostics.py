@@ -152,6 +152,60 @@ def shap_summary(df, model_key="xgb", max_display=14, seed=42, sample=3000):
                          "mean_abs_shap": mean_abs[order]}), sv, Xte, [feats[i] for i in order]
 
 
+def calibration(df, model_key="xgb", k=5, n_bins=10, feats=None):
+    """Are the predicted probabilities meaningful, or just a ranking?
+
+    Susceptibility maps are routinely binned by natural breaks from raw, uncalibrated model scores
+    and then read as probabilities. This is presence-BACKGROUND learning at an arbitrary 1:1 ratio,
+    so the output is a relative index, not P(avalanche). Reliability curve + Brier score quantify
+    the gap, and isotonic regression shows how much of it is recoverable.
+    """
+    from sklearn.calibration import calibration_curve
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.metrics import brier_score_loss
+
+    y, p = oof_predictions(df, model_key, spatial=True, k=k, feats=feats)
+    frac, mean_pred = calibration_curve(y, p, n_bins=n_bins, strategy="quantile")
+    brier = brier_score_loss(y, p)
+    iso = IsotonicRegression(out_of_bounds="clip").fit(p, y)
+    p_cal = iso.predict(p)
+    brier_cal = brier_score_loss(y, p_cal)
+    print(f"  Brier score raw       : {brier:.4f}")
+    print(f"  Brier score isotonic  : {brier_cal:.4f}  ({100*(brier-brier_cal)/brier:+.1f}%)")
+    print(f"  max |observed-predicted| across bins: {np.max(np.abs(frac - mean_pred)):.3f}")
+    return dict(y=y, p=p, p_cal=p_cal, frac=frac, mean_pred=mean_pred,
+                brier=brier, brier_cal=brier_cal)
+
+
+def background_ratio_sensitivity(inv_path, proc_dir, ratios=(1, 5, 10), model_key="xgb",
+                                 min_recurrence=4, n_boot=800, add_lineament=None):
+    """Presence-background prevalence is a modelling choice, not a property of the world.
+    Reported metrics should be shown to depend on it."""
+    import os
+    import tempfile
+    from inventory.sampling import build_training_table
+
+    rows = []
+    for r in ratios:
+        with tempfile.TemporaryDirectory() as td:
+            t = build_training_table(inv_path, proc_dir, os.path.join(td, "t.csv"),
+                                     negatives="matched", min_recurrence=min_recurrence,
+                                     n_ratio=r, match_aspect=True)
+        if add_lineament is not None:
+            t = add_lineament(t)
+        feats = [c for c in feature_columns(t) if c != "tpi"]
+        y, p = oof_predictions(t, model_key, spatial=True, feats=feats)
+        auc, lo, hi = bootstrap_ci(y, p, n_boot=n_boot)
+        from sklearn.metrics import average_precision_score, brier_score_loss
+        rows.append(dict(ratio=f"1:{r}", n_rows=len(t), prevalence=t.label.mean(),
+                         roc_auc=auc, ci_low=lo, ci_high=hi,
+                         pr_auc=average_precision_score(y, p),
+                         brier=brier_score_loss(y, p)))
+        print(f"  1:{r:<3} prevalence {t.label.mean():.3f}  AUC {auc:.3f} [{lo:.3f},{hi:.3f}]  "
+              f"PR-AUC {rows[-1]['pr_auc']:.3f}  Brier {rows[-1]['brier']:.4f}")
+    return pd.DataFrame(rows)
+
+
 def geography_ablation(df, model_key="xgb", n_boot=1000, k=5):
     """Do the coarse layers carry snowpack information, or only geography?"""
     feats = feature_columns(df)

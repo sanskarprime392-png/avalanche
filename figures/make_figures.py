@@ -162,6 +162,43 @@ def fig_transfer_and_shap():
     savefig(fig, "fig_transfer_shap", outdir=FIGS)
 
 
+def fig_susceptibility_map(decim=4):
+    """The deliverable map: susceptibility classes within potential release areas only."""
+    import rasterio
+    from matplotlib.colors import BoundaryNorm, ListedColormap
+    from matplotlib.patches import Patch
+    from figures.pubstyle import SUSCEPT_COLORS, SUSCEPT_LABELS
+
+    cls_p = os.path.join(RES, "susceptibility_classes.tif")
+    dem_p = os.path.join(DATA, "processed", "base_utm", "base_nasadem_elevation.tif")
+
+    with rasterio.open(cls_p) as s:
+        cls = s.read(1, out_shape=(s.height // decim, s.width // decim))
+        b = s.bounds
+    with rasterio.open(dem_p) as s:
+        dem = s.read(1, out_shape=(s.height // decim, s.width // decim)).astype("float32")
+        dem[dem == s.nodata] = np.nan
+    ext = [b.left / 1000, b.right / 1000, b.bottom / 1000, b.top / 1000]
+
+    fig, ax = plt.subplots(figsize=(8.4, 6.4))
+    # hillshade-ish grey base so unclassified terrain still reads as topography
+    ax.imshow(dem, extent=ext, cmap="Greys_r", vmin=np.nanpercentile(dem, 2),
+              vmax=np.nanpercentile(dem, 98), alpha=0.55)
+    cmap = ListedColormap(SUSCEPT_COLORS)
+    norm = BoundaryNorm([0.5, 1.5, 2.5, 3.5, 4.5, 5.5], cmap.N)
+    ax.imshow(np.ma.masked_invalid(cls), extent=ext, cmap=cmap, norm=norm, interpolation="nearest")
+    ax.set_xlabel("Easting (km, UTM 43N)")
+    ax.set_ylabel("Northing (km)")
+    ax.set_title("Avalanche susceptibility, Chandra-Bhaga & Upper Beas basins\n"
+                 "XGBoost, spatial-block CV AUC 0.934; masked to potential release areas "
+                 "(slope 28-60°)", fontsize=10)
+    ax.legend(handles=[Patch(facecolor=c, label=l)
+                       for c, l in zip(SUSCEPT_COLORS, SUSCEPT_LABELS)],
+              loc="lower left", fontsize=8, title="Susceptibility", title_fontsize=8.5,
+              framealpha=0.9, frameon=True)
+    savefig(fig, "fig_susceptibility_map", outdir=FIGS)
+
+
 def fig_roc_and_importance():
     df = pd.read_csv(os.path.join(DATA, "training_table_matched.csv"))
     feats = feature_columns(df)
@@ -209,6 +246,7 @@ if __name__ == "__main__":
     fig_geography_ablation()
     fig_model_ci()
     fig_transfer_and_shap()
+    fig_susceptibility_map()
     fig_model_comparison()
     imp = fig_roc_and_importance()
     print("\ntop predictors (permutation importance, spatial fold):")
