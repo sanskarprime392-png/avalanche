@@ -68,6 +68,31 @@ def fig_model_comparison():
     savefig(fig, "fig_model_comparison", outdir=FIGS)
 
 
+def fig_label_sensitivity():
+    """The headline finding is independent of inventory quality: paper-style sampling gives
+    AUC 1.000 at every label-confidence threshold, including n=240 (close to the published n=118)."""
+    d = pd.read_csv(os.path.join(RES, "label_quality_sensitivity.csv"))
+    fig, ax = plt.subplots(figsize=(6.4, 3.8))
+    for cfg, col, lbl in (("A", CB_PALETTE[1], "A — paper-style absences"),
+                          ("D", CB_PALETTE[0], "D — terrain-matched absences")):
+        s = d[d.config == cfg].sort_values("min_recurrence")
+        ax.plot(s.min_recurrence, s.roc_auc, "o-", color=col, lw=1.8, ms=6, label=lbl)
+        for _, r in s.iterrows():
+            ax.annotate(f"{r.roc_auc:.3f}", (r.min_recurrence, r.roc_auc),
+                        textcoords="offset points", xytext=(0, 8 if cfg == "A" else -14),
+                        ha="center", fontsize=7.5, color=col)
+    ns = d[d.config == "A"].sort_values("min_recurrence")
+    ax.set_xticks(ns.min_recurrence)
+    ax.set_xticklabels([f"≥{int(r.min_recurrence)}\n(n={int(r.n_presence):,})"
+                        for _, r in ns.iterrows()], fontsize=8)
+    ax.set_xlabel("Inventory confidence threshold (winters a slope was flagged)")
+    ax.set_ylabel("ROC-AUC (XGBoost)")
+    ax.set_ylim(0.85, 1.03)
+    ax.legend(fontsize=8, loc="center left")
+    ax.set_title("The sampling artefact is independent of inventory quality", fontsize=9.5)
+    savefig(fig, "fig_label_sensitivity", outdir=FIGS)
+
+
 def fig_roc_and_importance():
     df = pd.read_csv(os.path.join(DATA, "training_table_matched.csv"))
     feats = feature_columns(df)
@@ -111,6 +136,7 @@ if __name__ == "__main__":
     set_pub_style()
     os.makedirs(FIGS, exist_ok=True)
     fig_decomposition()
+    fig_label_sensitivity()
     fig_model_comparison()
     imp = fig_roc_and_importance()
     print("\ntop predictors (permutation importance, spatial fold):")
