@@ -21,19 +21,22 @@ Risk is then assembled in the standard form
 where hazard combines release susceptibility with reachability, exposure is the building count, and
 vulnerability comes from a fragility relationship for the dominant construction type.
 
-STATUS — NOT PUBLICATION READY. Tested against 277,529 Open Buildings centroids this gives 16,917 /
-35,295 / 46,813 reachable buildings at alpha = 34 / 30 / 28 deg, against 161-557 reported by
-Abhinav & Sattar from explicit RAMMS simulation of 371 selected sources. Two reasons the numbers
-are inflated, both structural rather than parameter choices:
+The line-of-sight version below (`reachable_hazard`) is retained only as a baseline. It over-counts
+badly — 35,295 reachable buildings at alpha=30 deg — because it never checks that a flow path
+actually connects source to target. Use `routed_building_risk`, which draws on the terrain-following
+routing in models/flowpy.py and reduces that to 10,300 buildings (3.7% of stock).
 
-  1. The energy line is line-of-sight. Without flow routing a building separated from a source by an
-     intervening ridge or valley still qualifies, so reach is systematically overestimated.
-  2. Taking the MAXIMUM susceptibility over the (often >100) qualifying sources saturates near 1.0,
-     which is why essentially every reachable building falls in the top hazard class. The grading is
-     an artefact of the aggregation, not a property of the terrain.
+Damage is graded by IMPACT PRESSURE rather than by susceptibility class:
 
-Use this module for screening-level upper bounds only. Credible exposure requires routed runout —
-Flow-Py (open source, energy line WITH flow routing) or r.avaflow — which is a separate work package.
+    p = rho * g * z_delta        rho ~ 300 kg/m3 for a dense-flow avalanche
+
+with z_delta the energy-line height delivered by the routing. Unreinforced masonry — the dominant
+construction type in these valleys — suffers light damage from ~3 kPa, serious damage from ~10 kPa
+and total destruction above ~30 kPa.
+
+SCOPE: this is a worst-case screening product, not an annual risk. It assumes every high-
+susceptibility release area fails; it carries no return period, and no release-depth scenarios.
+Adding frequency requires either a dated inventory or scenario modelling by release depth.
 """
 import numpy as np
 import rasterio
@@ -119,6 +122,73 @@ def reachable_hazard(sus_path, dem_path, buildings_xy, alpha_deg=28.0, max_dist_
             hazard[i] = rs[idx][reach].max()
             n_src[i] = int(reach.sum())
     return hazard, n_src
+
+
+SNOW_DENSITY = 300.0        # kg/m3, dense-flow avalanche
+G = 9.81
+# impact pressure thresholds (kPa) for unreinforced masonry, with damage fraction
+PRESSURE_BANDS = [(0.0, 3.0, "negligible", 0.00),
+                  (3.0, 10.0, "light", 0.15),
+                  (10.0, 30.0, "serious", 0.50),
+                  (30.0, 1e9, "destructive", 1.00)]
+
+
+def impact_pressure_kpa(z_delta, density=SNOW_DENSITY):
+    """Impact pressure from energy-line height: p = rho * g * z_delta."""
+    return density * G * np.asarray(z_delta, dtype="float64") / 1000.0
+
+
+def routed_building_risk(zdelta_tif, source_sus_tif, buildings_xy,
+                         occupants_per_building=5.0, density=SNOW_DENSITY):
+    """Building-level risk from terrain-routed runout. This is the tool's primary output."""
+    import pandas as pd
+
+    from .flowpy import sample_at_points
+
+    with rasterio.open(zdelta_tif) as s:
+        zd = s.read(1)
+        transform = s.transform
+    with rasterio.open(source_sus_tif) as s:
+        ss = s.read(1)
+
+    b_zd = sample_at_points(zd, transform, buildings_xy)
+    b_ss = sample_at_points(ss, transform, buildings_xy)
+    reached = np.isfinite(b_zd)
+    p = impact_pressure_kpa(np.where(reached, b_zd, 0.0), density)
+
+    band = np.full(len(buildings_xy), "not reached", dtype=object)
+    dmg = np.zeros(len(buildings_xy))
+    for lo, hi, name, frac in PRESSURE_BANDS:
+        m = reached & (p > lo) & (p <= hi)
+        band[m] = name
+        dmg[m] = frac
+
+    per_building = pd.DataFrame(dict(
+        x=buildings_xy[:, 0], y=buildings_xy[:, 1],
+        reached=reached, z_delta_m=b_zd, impact_kpa=np.where(reached, p, np.nan),
+        source_susceptibility=b_ss, damage_band=band, damage_fraction=dmg))
+
+    rows = []
+    for _, _, name, frac in PRESSURE_BANDS:
+        m = per_building.damage_band == name
+        n = int(m.sum())
+        if not n:
+            continue
+        rows.append(dict(damage_band=name, buildings=n,
+                         pct_of_stock=100 * n / len(per_building),
+                         median_impact_kpa=float(per_building.loc[m, "impact_kpa"].median()),
+                         damage_fraction=frac,
+                         expected_buildings_destroyed=n * frac,
+                         population_exposed=n * occupants_per_building))
+    summary = pd.DataFrame(rows)
+    if len(summary):
+        summary.loc[len(summary)] = dict(
+            damage_band="TOTAL EXPOSED", buildings=int(reached.sum()),
+            pct_of_stock=100 * reached.mean(), median_impact_kpa=np.nan,
+            damage_fraction=np.nan,
+            expected_buildings_destroyed=summary.expected_buildings_destroyed.sum(),
+            population_exposed=int(reached.sum()) * occupants_per_building)
+    return per_building, summary
 
 
 def classify_hazard(h):
