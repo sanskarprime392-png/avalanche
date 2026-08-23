@@ -129,6 +129,39 @@ def fig_model_ci():
     savefig(fig, "fig_model_ci", outdir=FIGS)
 
 
+def fig_transfer_and_shap():
+    """Spatial transferability between sub-basins, and SHAP importance with the self-audit flag."""
+    t = pd.read_csv(os.path.join(RES, "transferability.csv"))
+    s = pd.read_csv(os.path.join(RES, "shap_importance.csv"))
+    fig, axs = plt.subplots(1, 2, figsize=(9.8, 4.0))
+
+    y = np.arange(len(t))
+    axs[0].barh(y, t.roc_auc, xerr=[t.roc_auc - t.ci_low, t.ci_high - t.roc_auc],
+                color=CB_PALETTE[0], error_kw=dict(lw=1, capsize=3), height=0.5)
+    axs[0].axvline(0.939, color=CB_PALETTE[1], ls="--", lw=1.2,
+                   label="within-region (spatial CV)")
+    for i, a in enumerate(t.roc_auc):
+        axs[0].text(a + 0.006, i, f"{a:.3f}", va="center", fontsize=8.5)
+    axs[0].set_yticks(y)
+    axs[0].set_yticklabels(["Chandra-Bhaga → Upper Beas", "Upper Beas → Chandra-Bhaga"],
+                           fontsize=8.5)
+    axs[0].set_xlim(0.5, 1.0)
+    axs[0].set_xlabel("ROC-AUC on the unseen sub-basin (95% CI)")
+    axs[0].legend(fontsize=7.5, loc="lower left")
+    axs[0].set_title("Spatial transferability", fontsize=9.5)
+
+    s = s.iloc[::-1]
+    cols = [CB_PALETTE[1] if f == "tpi" else CB_PALETTE[2] for f in s.feature]
+    axs[1].barh(np.arange(len(s)), s.mean_abs_shap, color=cols)
+    axs[1].set_yticks(np.arange(len(s)))
+    axs[1].set_yticklabels(s.feature, fontsize=8)
+    axs[1].set_xlabel("mean |SHAP|")
+    axs[1].set_title("SHAP importance — orange = artefact of our own\nrelease-point rule, excluded",
+                     fontsize=9.5)
+    fig.tight_layout()
+    savefig(fig, "fig_transfer_shap", outdir=FIGS)
+
+
 def fig_roc_and_importance():
     df = pd.read_csv(os.path.join(DATA, "training_table_matched.csv"))
     feats = feature_columns(df)
@@ -175,6 +208,7 @@ if __name__ == "__main__":
     fig_label_sensitivity()
     fig_geography_ablation()
     fig_model_ci()
+    fig_transfer_and_shap()
     fig_model_comparison()
     imp = fig_roc_and_importance()
     print("\ntop predictors (permutation importance, spatial fold):")

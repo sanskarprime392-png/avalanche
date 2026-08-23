@@ -87,6 +87,71 @@ def compare_models_ci(df, models=("lgbm", "xgb", "rf", "svm_rbf", "logreg"), n_b
     return res
 
 
+def sub_basin_transfer(df, split_lat_utm=3_585_000.0, model_key="xgb", n_boot=1000):
+    """Train on one sub-basin, test on the other — the strongest generalisation evidence.
+
+    The Pir Panjal crest near Rohtang (~32.37 N) separates the Upper Beas catchment to the south
+    from Chandra-Bhaga to the north, so a northing split approximates the basin divide. Transfer
+    performance answers "would this model work somewhere it has never seen?", which spatial-block
+    CV only partially tests.
+    """
+    feats = feature_columns(df)
+    north = df[df.y >= split_lat_utm]
+    south = df[df.y < split_lat_utm]
+    print(f"  north (Chandra-Bhaga): {len(north)} rows, {int(north.label.sum())} presence")
+    print(f"  south (Upper Beas)   : {len(south)} rows, {int(south.label.sum())} presence")
+
+    rows = []
+    for name, tr, te in (("north -> south", north, south), ("south -> north", south, north)):
+        m = get_models()[model_key]
+        m.fit(tr[feats].values, tr["label"].values)
+        p = m.predict_proba(te[feats].values)[:, 1]
+        y = te["label"].values
+        auc, lo, hi = bootstrap_ci(y, p, n_boot=n_boot)
+        rows.append(dict(transfer=name, n_train=len(tr), n_test=len(te),
+                         roc_auc=auc, ci_low=lo, ci_high=hi))
+        print(f"  {name:<16} AUC {auc:.3f}  [{lo:.3f}, {hi:.3f}]")
+    return pd.DataFrame(rows)
+
+
+def response_curves(df, variables, model_key="xgb", grid=25, seed=42):
+    """Partial-dependence response curves — is the model's behaviour physically sensible?
+
+    NOTE: elevation, slope and aspect are matched between presences and background by design, so
+    their curves are necessarily flat and carry NO physical information here. Only unmatched
+    predictors (curvature, ruggedness, position, wetness, distances) can be audited this way.
+    """
+    from sklearn.inspection import partial_dependence
+    feats = feature_columns(df)
+    m = get_models(seed)[model_key]
+    m.fit(df[feats].values, df["label"].values)
+    out = {}
+    for v in variables:
+        if v not in feats:
+            continue
+        pd_res = partial_dependence(m, df[feats].values, [feats.index(v)],
+                                    grid_resolution=grid, kind="average")
+        out[v] = (np.asarray(pd_res["grid_values"][0]), np.asarray(pd_res["average"][0]))
+    return out
+
+
+def shap_summary(df, model_key="xgb", max_display=14, seed=42, sample=3000):
+    """Mean |SHAP| per predictor on a held-out spatial fold."""
+    import shap
+    feats = feature_columns(df)
+    X, y, g = df[feats].values, df["label"].values, df["block_id"].values
+    tr, te = next(iter(GroupKFold(n_splits=5).split(X, y, groups=g)))
+    m = get_models(seed)[model_key]
+    m.fit(X[tr], y[tr])
+    Xte = X[te][:sample]
+    expl = shap.TreeExplainer(m)
+    sv = expl.shap_values(Xte)
+    mean_abs = np.abs(sv).mean(axis=0)
+    order = np.argsort(mean_abs)[::-1][:max_display]
+    return pd.DataFrame({"feature": [feats[i] for i in order],
+                         "mean_abs_shap": mean_abs[order]}), sv, Xte, [feats[i] for i in order]
+
+
 def geography_ablation(df, model_key="xgb", n_boot=1000, k=5):
     """Do the coarse layers carry snowpack information, or only geography?"""
     feats = feature_columns(df)
