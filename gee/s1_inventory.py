@@ -163,19 +163,35 @@ def export_candidates(recurrence, aoi, min_recurrence=2, min_area_m2=2700,
     return task
 
 
-def release_points(candidates, search_radius_m=600, smin=30.0, smax=50.0):
+def release_points(candidates, search_radius_m=600, smin=30.0, smax=50.0, method="centroid"):
     """Derive an avalanche RELEASE point for each deposit polygon.
 
     Susceptibility models predict where avalanches RELEASE, not where debris stops, so each deposit
-    is traced upslope: within a search radius around the deposit we take the highest pixel that sits
-    on release-angle terrain (default 30-50 deg) and is concave in plan curvature, and return it as
-    the presence point. Falls back to the deposit's own highest release-angle pixel if none is found.
+    is traced upslope into release-angle terrain (default 30-50 deg).
+
+    method="centroid" (default) returns the CENTROID of the release-angle terrain in the search
+    zone. method="highest" returns the highest such pixel, which was the original rule and is kept
+    only for comparison — it is BIASED. Selecting an extreme value necessarily places every presence
+    at a locally elevated topographic position, and that alone made TPI the top-ranked predictor by
+    SHAP (presence TPI averaged +36 against +3 for background) even though it carries no avalanche
+    information. Taking the centroid of the release zone removes the extreme-value selection.
     """
     slope = ee.Terrain.slope(DEM)
     release_terrain = slope.gte(smin).And(slope.lte(smax))
+    lonlat = ee.Image.pixelLonLat().updateMask(release_terrain)
     elev = DEM.updateMask(release_terrain)
 
-    def one(f):
+    def one_centroid(f):
+        zone = f.geometry().buffer(search_radius_m)
+        m = lonlat.reduceRegion(reducer=ee.Reducer.mean(), geometry=zone, scale=30,
+                                maxPixels=int(1e9), bestEffort=True)
+        lon, lat = m.get("longitude"), m.get("latitude")
+        return ee.Algorithms.If(
+            ee.Algorithms.IsEqual(lon, None),
+            f.centroid(10).set("zone", "deposit_fallback"),
+            ee.Feature(ee.Geometry.Point([lon, lat]), f.toDictionary()).set("zone", "release"))
+
+    def one_highest(f):
         zone = f.geometry().buffer(search_radius_m)
         best = elev.addBands(ee.Image.pixelLonLat()).reduceRegion(
             reducer=ee.Reducer.max(3), geometry=zone, scale=30, maxPixels=int(1e9), bestEffort=True)
@@ -185,4 +201,4 @@ def release_points(candidates, search_radius_m=600, smin=30.0, smax=50.0):
             f.centroid(10).set("zone", "deposit_fallback"),
             ee.Feature(ee.Geometry.Point([lon, lat]), f.toDictionary()).set("zone", "release"))
 
-    return candidates.map(one, dropNulls=True)
+    return candidates.map(one_centroid if method == "centroid" else one_highest, dropNulls=True)
