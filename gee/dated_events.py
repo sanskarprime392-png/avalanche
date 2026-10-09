@@ -21,11 +21,26 @@ from .s1_inventory import DEM, _composite, _s1
 
 def dated_deposits(aoi, rel_orbit, season_start, season_end, orbit_pass="DESCENDING",
                    vh_thresh=2.0, vv_cap=6.0, min_pixels=8,
-                   lia_min=30.0, lia_max=75.0, max_gap_days=30):
+                   lia_min=30.0, lia_max=75.0, max_gap_days=30, restrict_mask=None,
+                   require_snow=True, snow_min=65):
     """Detections between consecutive acquisitions, each tagged with its date bracket.
 
     Returns an ee.FeatureCollection of deposit polygons with date_before / date_after /
     window_days / area_m2.
+
+    `require_snow` rejects MELT-OUT false positives. Snow melting off rough ground roughens the
+    surface and raises backscatter exactly like avalanche debris does, so a bare-ground transition is
+    indistinguishable from a deposit on the change signal alone. Verification exposed this clearly:
+    without the filter, May+June hold 47% of detections against 12% in the published field inventory,
+    and June holds 13% where the published inventory has ZERO June avalanches because the snow is
+    already gone. A real deposit lands on terrain that is still snow-covered afterwards, so we
+    require MODIS NDSI snow cover >= `snow_min` in the days after the event.
+
+    `restrict_mask` confines detection to an existing mask, normally the multi-year recurrence
+    paths. Pairwise detection has higher RECALL but lower PRECISION than recurrence, because there
+    is no multi-winter filter to reject one-off change; restricting it to slopes already shown to
+    avalanche repeatedly keeps both properties at once, and cuts the exported volume by an order of
+    magnitude. This is the synthesis product: events that are BOTH dated and confident.
     """
     from .s1_inventory import local_incidence_angle
 
@@ -67,6 +82,16 @@ def dated_deposits(aoi, rel_orbit, season_start, season_end, orbit_pass="DESCEND
               .And(change.select("VV").lt(vv_cap))
               .And(slope.gte(25)).And(slope.lte(60))
               .And(lia.gte(lia_min)).And(lia.lte(lia_max)))
+        if require_snow:
+            # MEAN, not max: MODIS is 500 m, so one snowy sub-pixel makes a max-reducer accept a
+            # slope that has actually melted out. The mean over the following days is the stricter
+            # test that the ground really is still snow-covered.
+            snow = (ee.ImageCollection("MODIS/061/MOD10A1")
+                    .filterDate(t1, t1.advance(12, "day"))
+                    .select("NDSI_Snow_Cover").mean())
+            ok = ok.And(snow.gte(snow_min).unmask(0))
+        if restrict_mask is not None:
+            ok = ok.And(restrict_mask)
         ok = ok.selfMask().connectedPixelCount(50, True).gte(min_pixels).selfMask()
 
         vec = ok.reduceToVectors(geometry=aoi, scale=30, geometryType="polygon",
@@ -99,6 +124,20 @@ def dated_inventory(aoi, years, rel_orbit=136, orbit_pass="DESCENDING",
 
     out = ee.FeatureCollection(ee.List(years).map(one)).flatten()
     return out.filter(ee.Filter.gte("area_m2", min_area_m2))
+
+
+def confident_dated_inventory(aoi, years, rel_orbit=136, orbit_pass="DESCENDING",
+                              min_recurrence=3, min_area_m2=2700, **kw):
+    """Dated events restricted to slopes that avalanche repeatedly — confident AND dated.
+
+    Builds the multi-year recurrence mask first, then runs pairwise dated detection inside it.
+    """
+    from .s1_inventory import multiyear_recurrence
+
+    rec = multiyear_recurrence(aoi, years, rel_orbit=rel_orbit, orbit_pass=orbit_pass)
+    mask = rec.gte(min_recurrence).unmask(0)
+    return dated_inventory(aoi, years, rel_orbit=rel_orbit, orbit_pass=orbit_pass,
+                           min_area_m2=min_area_m2, restrict_mask=mask, **kw)
 
 
 def export_dated(fc, name="s1_dated_events", folder="avalanche_gee_exports"):
