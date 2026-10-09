@@ -86,7 +86,8 @@ def verification_map(sample, i, buffer_m=800, s2_cloud=30):
     return m
 
 
-def make_chips(sample, out_dir, buffer_m=700, size=420, s2_cloud=45, pad_days=25):
+def make_chips(sample, out_dir, buffer_m=700, size=420, s2_cloud=45, pad_days=25,
+               workers=10):
     """Render a before/after Sentinel-2 chip pair for each candidate as a single PNG.
 
     Produces reviewable images without needing an interactive map, so verification can be done
@@ -97,6 +98,8 @@ def make_chips(sample, out_dir, buffer_m=700, size=420, s2_cloud=45, pad_days=25
     import requests
     from PIL import Image, ImageDraw
 
+    from concurrent.futures import ThreadPoolExecutor
+
     os.makedirs(out_dir, exist_ok=True)
     # Snow reflectance in the visible bands routinely exceeds 6000, so the usual max of ~3500
     # saturates every snow-covered scene to flat white and destroys exactly the surface texture that
@@ -104,13 +107,14 @@ def make_chips(sample, out_dir, buffer_m=700, size=420, s2_cloud=45, pad_days=25
     vis = {"bands": ["B4", "B3", "B2"], "min": 300, "max": 9000, "gamma": 1.35}
     written = []
 
-    for i, f in enumerate(sample):
+    def build(i_f):
+        i, f = i_f
         p = f.get("properties", {})
         geom = ee.Geometry(f["geometry"])
         zone = geom.buffer(buffer_m).bounds()
         d0, d1 = p.get("date_before"), p.get("date_after")
         if not (d0 and d1):
-            continue
+            return None
         pre_d, post_d = ee.Date(d0), ee.Date(d1)
 
         def comp(start, end, newest_first):
@@ -153,11 +157,16 @@ def make_chips(sample, out_dir, buffer_m=700, size=420, s2_cloud=45, pad_days=25
             fill=(235, 235, 235))
         path = os.path.join(out_dir, f"cand_{i:03d}.png")
         sheet.save(path)
-        written.append(path)
-        if (i + 1) % 10 == 0:
-            print(f"  {i+1}/{len(sample)} chips", flush=True)
+        return path
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for k, path in enumerate(pool.map(build, list(enumerate(sample))), start=1):
+            if path:
+                written.append(path)
+            if k % 10 == 0:
+                print(f"  {k}/{len(sample)} chips", flush=True)
     print(f"wrote {len(written)} chips -> {out_dir}")
-    return written
+    return sorted(written)
 
 
 def contact_sheet(chip_paths, out_path, cols=2, rows=5):
