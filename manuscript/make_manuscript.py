@@ -30,6 +30,7 @@ fe = pd.read_csv(os.path.join(RES, "filter_effectiveness.csv"))
 cl = pd.read_csv(os.path.join(RES, "correction_ladder.csv"))
 sc = pd.read_csv(os.path.join(RES, "simulation_curve.csv"))
 das = pd.read_csv(os.path.join(RES, "design_adjusted_skill.csv"))
+rb = pd.read_csv(os.path.join(RES, "simulation_robustness.csv"))
 
 doc = Document()
 doc.styles["Normal"].font.name = "Calibri"
@@ -311,6 +312,18 @@ P("Measuring the three real designs used in this study on the same scale places 
   "what the published protocol returns on real data (Section 4.2). The artefact is therefore not "
   "incidental to one dataset; it is the expected consequence of the design.")
 
+P("A synthetic result invites the objection that it reflects the authors' construction rather "
+  "than the problem, so the null arm was repeated while varying the learner, the number of "
+  "predictors and the sample size. The inflation is essentially unchanged throughout: across six "
+  "settings the null-model AUC differs by at most 0.030 at any displacement, and by 0.001 at "
+  "δ = 6. The behaviour is a property of evaluating a presence-only model against constructed "
+  "absences, not of this particular simulation.")
+piv = rb.pivot(index="setting", columns="delta", values="auc")
+rows = [[idx] + [f"{piv.loc[idx, c]:.3f}" for c in piv.columns] for idx in piv.index]
+table(["Setting"] + [f"δ={c:g}" for c in piv.columns], rows,
+      [2.2] + [0.62] * len(piv.columns),
+      "Table 2. Null-model AUC under varying simulation settings.")
+
 H("4.2 Skill, once the design is accounted for", 2)
 P("This yields a correction. If a model with no skill would score B at a study's own separability, "
   "then only the amount by which the study exceeds B is attributable to the model. We estimate B by "
@@ -319,7 +332,7 @@ rows = [[r.configuration, f"{r.delta:.2f}", f"{r.reported_auc:.3f}", f"{r.null_b
          f"{r.adjusted_skill:+.3f}"] for _, r in das.iterrows()]
 table(["Configuration", "δ (SD)", "Reported AUC", "Null baseline", "Adjusted skill"], rows,
       [2.4, 0.7, 1.1, 1.1, 1.1],
-      "Table 2. Reported AUC and skill above the null model at the same absence design.")
+      "Table 3. Reported AUC and skill above the null model at the same absence design.")
 P("The published protocol contributes nothing: its reported 1.000 is exactly what the sampling "
   "design alone delivers. Terrain matching contributes 0.027. The fully corrected configuration — "
   "aspect-matched absences and melt-out-filtered labels — reports the LOWEST AUC of the three at "
@@ -339,7 +352,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 3. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 4. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -362,7 +375,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 4. Controlled decomposition of reported performance.")
+      "Table 5. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -386,7 +399,7 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 5. Sensitivity of the decomposition to inventory confidence.")
+      "Table 6. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
        "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
 
@@ -394,7 +407,7 @@ H("4.5 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 6. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 7. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -411,7 +424,7 @@ rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", 
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 7. Effect of the background sampling ratio.")
+      "Table 8. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -425,7 +438,7 @@ P("Having removed the sources of inflation, we asked what genuinely raises perfo
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 8. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 9. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "

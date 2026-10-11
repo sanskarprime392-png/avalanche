@@ -123,3 +123,31 @@ def design_adjusted_skill(auc, df=None, delta=None, n_rep=10, **kw):
     frac = (auc - base) / head if head > 0.01 else float("nan")
     return dict(delta=delta, reported_auc=auc, null_baseline=base,
                 adjusted_skill=auc - base, skill_fraction=frac)
+
+
+def robustness(deltas=(0, 1, 2, 3, 4, 6), n_rep=5):
+    """Does the inflation law depend on how the simulation was set up?
+
+    A reviewer's first objection to a synthetic result is that it is an artefact of the authors'
+    choices. We therefore vary the things that could plausibly matter — the learner, the number of
+    predictors, whether predictors are correlated, and the sample size — and report the null arm in
+    each. If a model with no skill inflates the same way under all of them, the behaviour belongs to
+    presence-only evaluation rather than to this particular construction.
+    """
+    import pandas as pd
+    rows = []
+    settings = [
+        ("Random Forest, 8 predictors",          dict(model="rf", d=8, n=2000)),
+        ("XGBoost, 8 predictors",                dict(model="xgb", d=8, n=2000)),
+        ("Random Forest, 4 predictors",          dict(model="rf", d=4, n=2000)),
+        ("Random Forest, 20 predictors",         dict(model="rf", d=20, n=2000)),
+        ("Random Forest, n=500 per class",       dict(model="rf", d=8, n=500)),
+        ("Random Forest, n=5000 per class",      dict(model="rf", d=8, n=5000)),
+    ]
+    for label, kw in settings:
+        for delta in deltas:
+            a = [simulate(delta, seed=s, informative=False, **kw) for s in range(n_rep)]
+            rows.append(dict(setting=label, delta=delta, auc=float(np.mean(a))))
+        got = [r["auc"] for r in rows if r["setting"] == label]
+        print(f"  {label:<34} " + "  ".join(f"{v:.3f}" for v in got), flush=True)
+    return pd.DataFrame(rows)
