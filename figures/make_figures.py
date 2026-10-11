@@ -252,3 +252,28 @@ if __name__ == "__main__":
     print("\ntop predictors (permutation importance, spatial fold):")
     for k, v in sorted(imp.items(), key=lambda x: -x[1]):
         print(f"   {k:26} {v:.4f}")
+
+
+def fig_correction_ladder():
+    """Cumulative effect of each correction — the paper in one figure."""
+    d = pd.read_csv(os.path.join(RES, "correction_ladder.csv"))
+    fig, ax = plt.subplots(figsize=(7.4, 4.2))
+    y = np.arange(len(d))[::-1]
+    vals = d.roc_auc.values
+    cols = [CB_PALETTE[1]] + [CB_PALETTE[0]] * (len(d) - 2) + [CB_PALETTE[2]]
+    ax.barh(y, vals, color=cols, height=0.62)
+    for i, (v, dl) in enumerate(zip(vals, d.delta.fillna(""))):
+        ax.text(v + 0.006, y[i], f"{v:.3f}", va="center", fontsize=9, fontweight="bold")
+        if dl:
+            ax.text(0.518, y[i], str(dl), va="center", fontsize=9, color="white",
+                    fontweight="bold")
+    labels = [c.replace("+ ", "") for c in d.configuration]
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8.5)
+    ax.set_xlim(0.5, 1.06)
+    ax.set_xlabel("ROC-AUC (XGBoost)")
+    ax.axvline(vals[-1], color="0.6", lw=0.8, ls=":")
+    ax.set_title("Each correction removes a source of inflation; label quality removes the most",
+                 fontsize=9.5)
+    fig.tight_layout()
+    savefig(fig, "fig_correction_ladder", outdir=FIGS)

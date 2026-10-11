@@ -25,6 +25,7 @@ ls = pd.read_csv(os.path.join(RES, "label_quality_sensitivity.csv"))
 sh = pd.read_csv(os.path.join(RES, "shap_importance.csv"))
 pv = pd.read_csv(os.path.join(RES, "precision_verification.csv"))
 fe = pd.read_csv(os.path.join(RES, "filter_effectiveness.csv"))
+cl = pd.read_csv(os.path.join(RES, "correction_ladder.csv"))
 
 doc = Document()
 doc.styles["Normal"].font.name = "Calibri"
@@ -250,7 +251,27 @@ P("Models are evaluated under random k-fold cross-validation, as in published wo
 # ---------------------------------------------------------------- 4 results
 H("4. Results", 1)
 
-H("4.1 Where reported performance comes from", 2)
+H("4.1 What each correction costs", 2)
+P("Five corrections separate the published protocol from a defensible estimate. Applying them "
+  "cumulatively to the same models and the same study area shows how much of the reported figure "
+  "each one accounts for.")
+rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
+         r["what it removes"]] for _, r in cl.iterrows()]
+table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
+      "Table 1. Cumulative effect of each methodological correction (XGBoost).")
+P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
+  f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
+  f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
+  "has concentrated on. Spatial cross-validation, the standard methodological correction in this "
+  f"literature, accounts for {abs(float(cl.delta.iloc[2])):.3f}; label quality — removing melt-out "
+  "false positives and deriving release points without an extreme-value rule — accounts for "
+  f"{abs(float(cl.delta.iloc[4])):.3f}, roughly six times as much. Inventory precision is not "
+  "reported at all in the studies we reproduce, so this term is invisible in published work.")
+figure("fig_correction_ladder",
+       "Figure 1. Cumulative effect of each correction. Label quality removes more apparent skill "
+       "than sampling design and spatial validation combined.")
+
+H("4.2 2", 2)
 rows = []
 lab = {"A": ("paper-style", "random"), "B": ("paper-style", "spatial-block"),
        "C": ("terrain-matched", "random"), "D": ("terrain-matched", "spatial-block")}
@@ -260,7 +281,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 1. Controlled decomposition of reported performance.")
+      "Table 2. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -269,7 +290,7 @@ P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:
   f"changes performance by {a_xgb - b_xgb:+.3f}. The optimism is therefore attributable to sampling "
   "design, and essentially not at all to spatial autocorrelation.")
 figure("fig_leakage_decomposition",
-       "Figure 1. Decomposition of reported performance. Paper-style absences produce perfect "
+       "Figure 2. Decomposition of reported performance. Paper-style absences produce perfect "
        "separation regardless of the cross-validation scheme.")
 
 P("This result does not depend on the quality of our inventory. Repeating the contrast at four "
@@ -284,11 +305,11 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 2. Sensitivity of the decomposition to inventory confidence.")
+      "Table 3. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
-       "Figure 2. The sampling artefact is independent of inventory size and label confidence.")
+       "Figure 3. The sampling artefact is independent of inventory size and label confidence.")
 
-H("4.2 How many detections are real?", 2)
+H("4.3 2", 2)
 P("One hundred detections were sampled at random, twenty per month, and reviewed blind against "
   "Sentinel-2 imagery from each detection's own acquisition window; thirty-one have been judged so "
   "far. A detection counts as verified only when fresh debris appears inside the outline and the "
@@ -299,7 +320,7 @@ rows = [[r.inventory, int(r.true_positives), int(r.false_positives), int(r.n_jud
         for _, r in pv.iterrows()]
 table(["Inventory", "verified", "false", "n", "precision", "95% CI"], rows,
       [2.0, 0.9, 0.8, 0.5, 1.0, 1.4],
-      "Table 8. Blind optical verification of the Sentinel-1 detections.")
+      "Table 4. Blind optical verification of the Sentinel-1 detections.")
 P(f"Precision of the unfiltered detections is {100*pv.precision.iloc[0]:.1f}%. Nearly every false "
   "positive is the same failure: between the two acquisitions the whole scene changes, as snow "
   "falls across it or melts off it, and bare or wetted ground raises backscatter exactly as "
@@ -309,7 +330,7 @@ P(f"Precision of the unfiltered detections is {100*pv.precision.iloc[0]:.1f}%. N
 rows = [[r.verdict, int(r.judged), int(r.removed_by_filter), f"{r.pct_removed:.0f}%"]
         for _, r in fe.iterrows()]
 table(["Reviewed as", "n", "removed by filter", "% removed"], rows, [2.2, 0.6, 1.4, 1.0],
-      "Table 9. Effect of the snow-persistence filter on the reviewed detections.")
+      "Table 5. Effect of the snow-persistence filter on the reviewed detections.")
 P("Requiring MODIS snow cover to persist after each event removes two thirds of the verified false "
   f"positives and none of the verified avalanches, raising precision to "
   f"{100*pv.precision.iloc[1]:.1f}% and shrinking the inventory from 7,055 to 2,064 events. The "
@@ -321,7 +342,7 @@ P("We report these figures because this literature does not. Published inventori
   "avalanches is unknown in every study we reproduce. Section 4.1 shows why that matters less than "
   "it appears for our central result and more than it appears for the maps built on such inventories.")
 
-H("4.3 Model comparison under honest validation", 2)
+H("4.4 3", 2)
 rows = []
 for mk in ("lgbm", "xgb", "rf", "svm_rbf", "logreg"):
     rnd = mt[(mt.model == mk) & (mt.cv == "random")].iloc[0]
@@ -331,19 +352,19 @@ for mk in ("lgbm", "xgb", "rf", "svm_rbf", "logreg"):
                  f"{spa.pr_auc:.3f}", f"{spa.accuracy:.3f}", f"{spa.kappa:.3f}"])
 table(["Model", "AUC (random)", "AUC (spatial, 95% CI)", "PR-AUC", "Accuracy", "Kappa"], rows,
       [1.3, 1.1, 1.7, 0.8, 0.9, 0.7],
-      "Table 3. Model performance with terrain-matched absences (20 predictors, TPI excluded).")
+      "Table 6. Model performance with terrain-matched absences (20 predictors, TPI excluded).")
 P("Gradient-boosted trees outperform the Random Forest used in the reference study, but LightGBM "
   "and XGBoost are statistically indistinguishable from one another (paired bootstrap ΔAUC "
   "+0.0003, 95% CI −0.0013 to +0.0018). Reporting a single best model is not supportable at this "
   "sample size, and by extension neither are the four-way model rankings published on inventories "
   "of around one hundred points.")
-figure("fig_model_ci", "Figure 3. Model ranking with bootstrap confidence intervals.", 5.4)
+figure("fig_model_ci", "Figure 4. Model ranking with bootstrap confidence intervals.", 5.4)
 
-H("4.4 Coarse predictors encode geography, not snowpack", 2)
+H("4.5 4", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 4. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 7. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -353,14 +374,14 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
   "duration among the leading predictors may therefore be describing a geographic index rather "
   "than snowpack process.")
-figure("fig_geography_ablation", "Figure 4. Coarse predictors are interchangeable with coordinates.", 6.4)
+figure("fig_geography_ablation", "Figure 5. Coarse predictors are interchangeable with coordinates.", 6.4)
 
-H("4.5 Reported AUC depends on the background sampling ratio", 2)
+H("4.6 5", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 5. Effect of the background sampling ratio.")
+      "Table 8. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -368,19 +389,19 @@ P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc
   "the model becomes less useful for the operational task. Precision-recall metrics should be "
   "reported alongside AUC.")
 
-H("4.6 Spatial transferability", 2)
+H("4.7 6", 2)
 rows = [[r.transfer.replace("north", "Chandra-Bhaga").replace("south", "Upper Beas"),
          f"{int(r.n_train):,}", f"{int(r.n_test):,}",
          f"{r.roc_auc:.3f} [{r.ci_low:.3f}, {r.ci_high:.3f}]"] for _, r in tr.iterrows()]
 table(["Transfer", "n train", "n test", "AUC (95% CI)"], rows, [2.2, 1.0, 1.0, 1.7],
-      "Table 6. Training on one sub-basin and testing on the other.")
+      "Table 9. Training on one sub-basin and testing on the other.")
 P(f"Transfer performance is symmetric and approximately 0.05 below within-region performance, "
   "indicating that the model generalises to terrain it has not seen rather than memorising local "
   "configurations.")
 figure("fig_transfer_shap",
-       "Figure 5. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
+       "Figure 6. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
 
-H("4.7 Calibration", 2)
+H("4.8 7", 2)
 P("Predicted scores are informative but not calibrated probabilities: the Brier score is 0.1034, "
   "isotonic regression recovers only 3.5% of it, and the maximum deviation between predicted and "
   "observed frequency across quantile bins is 0.099, with under-prediction at low scores and "
@@ -389,7 +410,7 @@ P("Predicted scores are informative but not calibrated probabilities: the Brier 
   "P(avalanche) — a distinction lost when raw scores are binned by natural breaks and presented as "
   "hazard classes.")
 
-H("4.8 Illustrative application: susceptibility map", 2)
+H("4.9 8", 2)
 P("The map below applies XGBoost with terrain-matched sampling, restricted to potential release "
   "areas (slope 28–60°), covering 11,699 km². It is included to show what the corrected procedure "
   "produces and to make the domain question concrete; it is NOT offered as an operational "
@@ -404,9 +425,9 @@ P("Restricting the domain matters for comparability: classifying valley floors a
 table(["Class", "Area (km²)", "% of release area"],
       [["Very low", "6,125", "52.4"], ["Low", "2,167", "18.5"], ["Moderate", "1,314", "11.2"],
        ["High", "1,017", "8.7"], ["Very high", "1,077", "9.2"]],
-      [1.4, 1.3, 1.6], "Table 7. Susceptibility classes within potential release areas.")
+      [1.4, 1.3, 1.6], "Table 10. Susceptibility classes within potential release areas.")
 figure("fig_susceptibility_map",
-       "Figure 6. Avalanche susceptibility across the Chandra-Bhaga and Upper Beas basins, "
+       "Figure 7. Avalanche susceptibility across the Chandra-Bhaga and Upper Beas basins, "
        "restricted to potential release areas.", 6.4)
 P("Excluding the coarse predictors changes 39% of class assignments (Pearson r = 0.761) but 71% of "
   "high and very-high pixels remain in those classes, indicating that the principal hotspots are "
