@@ -228,3 +228,34 @@ def geography_ablation(df, model_key="xgb", n_boot=1000, k=5):
                          ci_low=lo, ci_high=hi))
         print(f"  {name:<26} {len(cols):>3} feats  AUC {auc:.3f}  [{lo:.3f}, {hi:.3f}]")
     return pd.DataFrame(rows)
+
+
+def select_threshold(y, p, method="youden"):
+    """Pick the decision threshold from the data instead of defaulting to 0.5.
+
+    Under spatial-block validation the model's scores for POSITIVES shift downward in terrain it
+    has not seen (mean 0.85 -> 0.58 here) while scores for negatives barely move. Discrimination is
+    unaffected — the ranking, and therefore AUC, holds — but a fixed 0.5 cut then misses a large
+    share of real sites. Because 0.5 carries no meaning for a presence-background model fitted at an
+    arbitrary prevalence, the operating point belongs to the evaluation, not to convention.
+
+    "youden" maximises sensitivity + specificity - 1, the usual choice in susceptibility work;
+    "f1" maximises F1, which favours recall and suits a hazard screening use.
+    """
+    from sklearn.metrics import f1_score, roc_curve
+
+    if method == "youden":
+        fpr, tpr, thr = roc_curve(y, p)
+        return float(thr[np.argmax(tpr - fpr)])
+    grid = np.linspace(0.05, 0.95, 91)
+    return float(max(((f1_score(y, (p >= t).astype(int)), t) for t in grid))[1])
+
+
+def metrics_at(y, p, thr):
+    from sklearn.metrics import (accuracy_score, cohen_kappa_score, f1_score,
+                                 precision_score, recall_score, confusion_matrix)
+    yp = (p >= thr).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y, yp).ravel()
+    return dict(threshold=thr, accuracy=accuracy_score(y, yp),
+                kappa=cohen_kappa_score(y, yp), precision=precision_score(y, yp),
+                recall=recall_score(y, yp), f1=f1_score(y, yp), fpr=fp / (fp + tn))
