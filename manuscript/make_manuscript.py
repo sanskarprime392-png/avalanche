@@ -23,6 +23,8 @@ br = pd.read_csv(os.path.join(RES, "background_ratio.csv"))
 tr = pd.read_csv(os.path.join(RES, "transferability.csv"))
 ls = pd.read_csv(os.path.join(RES, "label_quality_sensitivity.csv"))
 sh = pd.read_csv(os.path.join(RES, "shap_importance.csv"))
+pv = pd.read_csv(os.path.join(RES, "precision_verification.csv"))
+fe = pd.read_csv(os.path.join(RES, "filter_effectiveness.csv"))
 
 doc = Document()
 doc.styles["Normal"].font.name = "Calibri"
@@ -132,8 +134,13 @@ P(
     "interchangeable with raw spatial coordinates, and that reported AUC can be raised simply by "
     "increasing the background sampling ratio while precision-recall performance falls. A "
     f"terrain-matched, spatially validated model attains AUC {d_xgb:.3f} and transfers between "
-    f"sub-basins at {tr.roc_auc.mean():.3f}. We provide a corrected susceptibility map restricted to "
-    "potential release areas, and openly document one artefact detected in our own pipeline.")
+    f"sub-basins at {tr.roc_auc.mean():.3f}. Blind optical verification of the detections, which this "
+    "literature does not report, puts their precision at "
+    f"{100*pv.precision.iloc[0]:.0f}% ({pv.true_positives.iloc[0]}/{pv.n_judged.iloc[0]}); requiring "
+    "snow cover to persist after each event removes two thirds of the false positives without losing "
+    f"any verified avalanche, raising precision to {100*pv.precision.iloc[1]:.0f}%. We provide a "
+    "corrected susceptibility map restricted to potential release areas, and openly document two "
+    "artefacts detected in our own pipeline.")
 
 P("Keywords: snow avalanches, susceptibility mapping, sampling bias, spatial cross-validation, "
   "Sentinel-1, explainable machine learning, Western Himalaya", italic=True, size=9.5)
@@ -188,8 +195,8 @@ bullets([
 ])
 P("Deposits are traced upslope to the highest pixel on release-angle terrain (30–50°) within a "
   "600 m search radius, because susceptibility models predict release, not runout. This yields "
-  "6,364 release points, of which 3,188 are flagged in four or more winters — the threshold used "
-  "for the analyses below. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
+  "6,364 candidate release points, of which 3,188 are flagged in four or more winters — the "
+  "threshold used for the analyses below. Section 4.7 reports what fraction of these are real. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
   "not confined to road-accessible slopes.")
 
 H("3.2 Predictive factors", 2)
@@ -330,7 +337,40 @@ P("Predicted scores are informative but not calibrated probabilities: the Brier 
   "P(avalanche) — a distinction lost when raw scores are binned by natural breaks and presented as "
   "hazard classes.")
 
-H("4.7 Susceptibility map", 2)
+H("4.7 How many detections are real?", 2)
+P("One hundred detections were sampled at random, twenty per month, and reviewed blind against "
+  "Sentinel-2 imagery from each detection's own acquisition window; thirty-one have been judged so "
+  "far. A detection counts as verified only when fresh debris appears inside the outline and the "
+  "surrounding slope is unchanged between the two dates. Cases obscured by cloud are recorded as "
+  "unjudgeable and excluded rather than counted as failures.")
+rows = [[r.inventory, int(r.true_positives), int(r.false_positives), int(r.n_judged),
+         f"{100*r.precision:.1f}%", f"[{100*r.ci_low:.0f}%, {100*r.ci_high:.0f}%]"]
+        for _, r in pv.iterrows()]
+table(["Inventory", "verified", "false", "n", "precision", "95% CI"], rows,
+      [2.0, 0.9, 0.8, 0.5, 1.0, 1.4],
+      "Table 8. Blind optical verification of the Sentinel-1 detections.")
+P(f"Precision of the unfiltered detections is {100*pv.precision.iloc[0]:.1f}%. Nearly every false "
+  "positive is the same failure: between the two acquisitions the whole scene changes, as snow "
+  "falls across it or melts off it, and bare or wetted ground raises backscatter exactly as "
+  "avalanche debris does. Contrary to our expectation this is not confined to the ablation season — "
+  "verified failures include a February-to-March pair over which the snowpack disappeared "
+  "completely.")
+rows = [[r.verdict, int(r.judged), int(r.removed_by_filter), f"{r.pct_removed:.0f}%"]
+        for _, r in fe.iterrows()]
+table(["Reviewed as", "n", "removed by filter", "% removed"], rows, [2.2, 0.6, 1.4, 1.0],
+      "Table 9. Effect of the snow-persistence filter on the reviewed detections.")
+P("Requiring MODIS snow cover to persist after each event removes two thirds of the verified false "
+  f"positives and none of the verified avalanches, raising precision to "
+  f"{100*pv.precision.iloc[1]:.1f}% and shrinking the inventory from 7,055 to 2,064 events. The "
+  "sample of verified avalanches is small, so the precision interval remains wide; the filter's "
+  "selectivity — which failure modes it removes and which detections it preserves — is the stronger "
+  "evidence, and it is the quantity a susceptibility study actually depends on.")
+P("We report these figures because this literature does not. Published inventories in the region "
+  "are presented without a precision estimate, so the proportion of training labels that are real "
+  "avalanches is unknown in every study we reproduce. Section 4.1 shows why that matters less than "
+  "it appears for our central result and more than it appears for the maps built on such inventories.")
+
+H("4.8 Susceptibility map", 2)
 P("The final map applies XGBoost with terrain-matched sampling and is restricted to potential "
   "release areas (slope 28–60°), covering 11,699 km². Restricting the domain matters for "
   "comparability: classifying valley floors and lake surfaces as low susceptibility inflates the "
@@ -379,11 +419,16 @@ P("We tested whether adding a Winstral wind-shelter index — the dominant snow-
 
 H("5.4 Limitations", 2)
 bullets([
-    "Inventory precision is not established. Agreement between independent ascending and "
-    "descending detections is 17.8% on aspects both geometries observe well, so the inventory "
-    "should be treated as candidate avalanche-prone slopes rather than confirmed events. Recall at "
-    "eight sites named in the reference study is 6/8, against 4/12 at randomly chosen steep sites, "
-    "which is suggestive but not statistically significant at this sample size.",
+    "Inventory precision is low and is measured rather than assumed: 6.9% unfiltered and 18.2% "
+    "after the snow-persistence filter, on 31 blind optical judgements. The detections are "
+    "candidate avalanche-prone slopes, not confirmed events, and every result resting on them "
+    "inherits that. Agreement between independent ascending and descending geometries is 17.8% on "
+    "aspects both observe well, consistent with the direct measurement. Recall at eight sites named "
+    "in the reference study is 6/8 against 4/12 at randomly chosen steep sites — suggestive, but "
+    "not significant at this sample size.",
+    "The verified sample contains only two confirmed avalanches, so the precision interval is wide "
+    "and the filter's measured selectivity carries more weight than the point estimate. Completing "
+    "the remaining judgements would narrow it.",
     "Release points are inferred by upslope tracing rather than observed.",
     "Lithology and lineaments are taken from global datasets (GLiM, GEM) rather than the national "
     "geological survey products used in the reference study, so importance values for these "
