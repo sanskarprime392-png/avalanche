@@ -277,3 +277,68 @@ def fig_correction_ladder():
                  fontsize=9.5)
     fig.tight_layout()
     savefig(fig, "fig_correction_ladder", outdir=FIGS)
+
+
+def fig_inflation_law():
+    """AUC as a function of absence displacement, with real designs located on the same axis."""
+    c = pd.read_csv(os.path.join(RES, "simulation_curve.csv"))
+    d = pd.read_csv(os.path.join(RES, "design_separability.csv"))
+    fig, ax = plt.subplots(figsize=(7.2, 4.4))
+    for arm, col, mk in (("informative", CB_PALETTE[0], "o"),
+                         ("null (no true skill)", CB_PALETTE[1], "s")):
+        s = c[c.arm == arm].sort_values("delta")
+        ax.plot(s.delta, s.auc, mk + "-", color=col, lw=1.8, ms=5, label=arm)
+        ax.fill_between(s.delta, s.auc - s.sd, s.auc + s.sd, color=col, alpha=0.18, lw=0)
+    ax.axhline(0.5, color="0.55", lw=0.8, ls=":")
+    ax.text(0.08, 0.513, "chance", fontsize=7.5, color="0.4")
+
+    for _, r in d.iterrows():
+        x = min(r.separability_sd, 7.4)
+        ax.axvline(x, color="0.35", lw=0.9, ls="--", alpha=0.75)
+        ax.text(x - 0.12, 0.60, r.design.split("(")[0].strip(), rotation=90, fontsize=7.5,
+                ha="right", va="bottom", color="0.25")
+    ax.annotate("published protocol:\nnull model already scores 1.000",
+                xy=(6.0, 1.0), xytext=(3.5, 0.72), fontsize=8, color=CB_PALETTE[1],
+                arrowprops=dict(arrowstyle="->", color=CB_PALETTE[1], lw=1.1))
+    ax.set_xlabel("Absence displacement from presences, δ (standard deviations)")
+    ax.set_ylabel("Reported ROC-AUC")
+    ax.set_ylim(0.44, 1.04)
+    ax.set_xlim(-0.2, 7.5)
+    ax.legend(fontsize=8.5, loc="lower right")
+    ax.set_title("Reported AUC is set by how far absences are drawn from presences,\n"
+                 "whether or not the model has any predictive skill", fontsize=9.5)
+    fig.tight_layout()
+    savefig(fig, "fig_inflation_law", outdir=FIGS)
+
+
+def fig_adjusted_skill():
+    """Reported AUC against skill once the sampling design's own contribution is removed."""
+    d = pd.read_csv(os.path.join(RES, "design_adjusted_skill.csv"))
+    short = ["Published\nprotocol", "Terrain-\nmatched", "Terrain + aspect,\ncorrected labels"]
+    fig, axs = plt.subplots(1, 2, figsize=(9.4, 4.0), sharey=False)
+    x = np.arange(len(d))
+
+    axs[0].bar(x, d.reported_auc, color=CB_PALETTE[7], width=0.55)
+    axs[0].bar(x, d.null_baseline, color=CB_PALETTE[1], width=0.28,
+               label="attributable to sampling design")
+    for i, (a, b) in enumerate(zip(d.reported_auc, d.null_baseline)):
+        axs[0].text(i, a + 0.012, f"{a:.3f}", ha="center", fontsize=8.5, fontweight="bold")
+    axs[0].set_xticks(x)
+    axs[0].set_xticklabels(short, fontsize=8)
+    axs[0].set_ylim(0.5, 1.07)
+    axs[0].set_ylabel("ROC-AUC")
+    axs[0].legend(fontsize=7.5, loc="lower left")
+    axs[0].set_title("a   What is reported", fontsize=9.5, loc="left", fontweight="bold")
+
+    cols = [CB_PALETTE[1] if v < 0.01 else CB_PALETTE[2] for v in d.adjusted_skill]
+    axs[1].bar(x, d.adjusted_skill, color=cols, width=0.55)
+    for i, v in enumerate(d.adjusted_skill):
+        axs[1].text(i, v + 0.004, f"{v:+.3f}", ha="center", fontsize=8.5, fontweight="bold")
+    axs[1].set_xticks(x)
+    axs[1].set_xticklabels(short, fontsize=8)
+    axs[1].set_ylim(-0.01, 0.135)
+    axs[1].set_ylabel("AUC above the null model at the same δ")
+    axs[1].set_title("b   What the model actually contributes", fontsize=9.5, loc="left",
+                     fontweight="bold")
+    fig.tight_layout()
+    savefig(fig, "fig_adjusted_skill", outdir=FIGS)
