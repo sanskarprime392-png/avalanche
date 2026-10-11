@@ -16,7 +16,8 @@ NAVY = RGBColor(0x0B, 0x3D, 0x5C)
 NICE = {"lgbm": "LightGBM", "xgb": "XGBoost", "rf": "Random Forest",
         "svm_rbf": "SVM (RBF)", "logreg": "Logistic Regression"}
 
-mt = pd.read_csv(os.path.join(RES, "final_model_table.csv"))
+mt = pd.read_csv(os.path.join(RES, "final_model_table_v3.csv"))
+ia = pd.read_csv(os.path.join(RES, "improvement_attempts.csv"))
 ld = pd.read_csv(os.path.join(RES, "leakage_decomposition.csv"))
 ga = pd.read_csv(os.path.join(RES, "geography_ablation.csv"))
 br = pd.read_csv(os.path.join(RES, "background_ratio.csv"))
@@ -271,7 +272,7 @@ figure("fig_correction_ladder",
        "Figure 1. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
-H("4.2 2", 2)
+H("4.2 Where reported performance comes from", 2)
 rows = []
 lab = {"A": ("paper-style", "random"), "B": ("paper-style", "spatial-block"),
        "C": ("terrain-matched", "random"), "D": ("terrain-matched", "spatial-block")}
@@ -309,7 +310,7 @@ table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], ro
 figure("fig_label_sensitivity",
        "Figure 3. The sampling artefact is independent of inventory size and label confidence.")
 
-H("4.3 2", 2)
+H("4.3 How many detections are real?", 2)
 P("One hundred detections were sampled at random, twenty per month, and reviewed blind against "
   "Sentinel-2 imagery from each detection's own acquisition window; thirty-one have been judged so "
   "far. A detection counts as verified only when fresh debris appears inside the outline and the "
@@ -342,17 +343,18 @@ P("We report these figures because this literature does not. Published inventori
   "avalanches is unknown in every study we reproduce. Section 4.1 shows why that matters less than "
   "it appears for our central result and more than it appears for the maps built on such inventories.")
 
-H("4.4 3", 2)
+H("4.4 Model comparison under honest validation", 2)
 rows = []
 for mk in ("lgbm", "xgb", "rf", "svm_rbf", "logreg"):
     rnd = mt[(mt.model == mk) & (mt.cv == "random")].iloc[0]
     spa = mt[(mt.model == mk) & (mt.cv == "spatial")].iloc[0]
     rows.append([NICE[mk], f"{rnd.roc_auc:.3f}",
                  f"{spa.roc_auc:.3f} [{spa.ci_low:.3f}, {spa.ci_high:.3f}]",
-                 f"{spa.pr_auc:.3f}", f"{spa.accuracy:.3f}", f"{spa.kappa:.3f}"])
-table(["Model", "AUC (random)", "AUC (spatial, 95% CI)", "PR-AUC", "Accuracy", "Kappa"], rows,
-      [1.3, 1.1, 1.7, 0.8, 0.9, 0.7],
-      "Table 6. Model performance with terrain-matched absences (20 predictors, TPI excluded).")
+                 f"{spa.accuracy:.3f}", f"{spa.recall:.3f}", f"{spa.kappa:.3f}"])
+table(["Model", "AUC (random)", "AUC (spatial, 95% CI)", "Accuracy", "Recall", "Kappa"], rows,
+      [1.3, 1.1, 1.7, 0.9, 0.8, 0.7],
+      "Table 6. Model performance on the corrected inventory with multi-scale predictors, at a "
+      "cross-validated decision threshold.")
 P("Gradient-boosted trees outperform the Random Forest used in the reference study, but LightGBM "
   "and XGBoost are statistically indistinguishable from one another (paired bootstrap ΔAUC "
   "+0.0003, 95% CI −0.0013 to +0.0018). Reporting a single best model is not supportable at this "
@@ -360,7 +362,7 @@ P("Gradient-boosted trees outperform the Random Forest used in the reference stu
   "of around one hundred points.")
 figure("fig_model_ci", "Figure 4. Model ranking with bootstrap confidence intervals.", 5.4)
 
-H("4.5 4", 2)
+H("4.5 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
@@ -376,7 +378,7 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "than snowpack process.")
 figure("fig_geography_ablation", "Figure 5. Coarse predictors are interchangeable with coordinates.", 6.4)
 
-H("4.6 5", 2)
+H("4.6 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
@@ -389,7 +391,7 @@ P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc
   "the model becomes less useful for the operational task. Precision-recall metrics should be "
   "reported alongside AUC.")
 
-H("4.7 6", 2)
+H("4.7 Spatial transferability", 2)
 rows = [[r.transfer.replace("north", "Chandra-Bhaga").replace("south", "Upper Beas"),
          f"{int(r.n_train):,}", f"{int(r.n_test):,}",
          f"{r.roc_auc:.3f} [{r.ci_low:.3f}, {r.ci_high:.3f}]"] for _, r in tr.iterrows()]
@@ -401,7 +403,48 @@ P(f"Transfer performance is symmetric and approximately 0.05 below within-region
 figure("fig_transfer_shap",
        "Figure 6. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
 
-H("4.8 7", 2)
+H("4.8 The operating point shifts under spatial validation", 2)
+P("Thresholding at 0.5 is conventional but carries no meaning for a presence-background model "
+  "fitted at an arbitrary prevalence, and under spatial-block validation it is actively misleading. "
+  "Across held-out blocks the model's scores for NEGATIVES are essentially unchanged (mean 0.167 "
+  "under random folds, 0.162 under spatial blocks) while scores for POSITIVES fall sharply (0.849 "
+  "to 0.584). Ranking is unaffected — this is why AUC is unchanged — but 41.6% of genuine avalanche "
+  "sites then score below 0.5 and are classified as absence.")
+table(["Threshold", "Recall", "Precision", "Accuracy", "Kappa"],
+      [["0.50 (convention)", "0.584", "0.849", "0.740", "0.480"],
+       ["0.31 (Youden J, cross-validated)", "0.700", "0.790", "0.756", "0.513"],
+       ["0.13 (maximum F1)", "0.827", "0.704", "0.740", "—"]],
+      [2.2, 0.9, 1.0, 1.0, 0.8],
+      "Table 10. Effect of the decision threshold under spatial-block validation (XGBoost).")
+P("Selecting the threshold from the cross-validation rather than from convention raises recall from "
+  "0.584 to 0.700 and improves accuracy and kappa at the same time. All classified results reported "
+  "here use a cross-validated Youden threshold. The implication for anyone deploying such a map is "
+  "that a model validated on nearby terrain and then applied to an unmapped basin will "
+  "systematically under-predict hazard at a fixed 0.5 cut: the operating point must travel with the "
+  "model.")
+
+H("4.9 What improves a corrected model, and what does not", 2)
+P("Having removed the sources of inflation, we asked what genuinely raises performance. Four "
+  "interventions were tried on the corrected inventory and evaluated identically.")
+rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
+        for _, r in ia.iterrows()]
+table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
+      "Table 11. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
+  "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
+  "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
+  "nine predictors add 0.025 AUC and 0.058 recall. Restoring TPI adds a further 0.005: its earlier "
+  "dominance was an artefact of the highest-pixel release rule, and once release points are taken "
+  "as the centroid of release-angle terrain the presence-to-background gap falls from +33.5 to "
+  "+3.8, making it an ordinary predictor again.")
+P("Neither conventional route to a better score helped. A nested cross-validated hyperparameter "
+  "search over 24 candidates returned 0.857, below untuned defaults, because at 235 spatial blocks "
+  "the inner folds are too noisy to select on; averaging XGBoost, LightGBM and Random Forest "
+  "returned 0.860, below XGBoost alone. We report these negative results because they point the "
+  "same way as the rest of the paper: the available gains lie in label quality and in describing "
+  "the terrain at the right scale, not in model selection.")
+
+H("4.10 Calibration", 2)
 P("Predicted scores are informative but not calibrated probabilities: the Brier score is 0.1034, "
   "isotonic regression recovers only 3.5% of it, and the maximum deviation between predicted and "
   "observed frequency across quantile bins is 0.099, with under-prediction at low scores and "
@@ -410,7 +453,7 @@ P("Predicted scores are informative but not calibrated probabilities: the Brier 
   "P(avalanche) — a distinction lost when raw scores are binned by natural breaks and presented as "
   "hazard classes.")
 
-H("4.9 8", 2)
+H("4.11 Illustrative application: susceptibility map", 2)
 P("The map below applies XGBoost with terrain-matched sampling, restricted to potential release "
   "areas (slope 28–60°), covering 11,699 km². It is included to show what the corrected procedure "
   "produces and to make the domain question concrete; it is NOT offered as an operational "
@@ -422,13 +465,19 @@ P("Restricting the domain matters for comparability: classifying valley floors a
   "is highly susceptible' cannot be compared between studies unless each states its domain. The "
   "published study reports ~8% of the region as highly susceptible over the whole basin; the "
   "figures below are percentages of potential release area, which is the stricter denominator.")
+P("Of the 1.44 million release-area cells mapped, 67.7% are predicted confidently (ensemble "
+  "standard deviation at or below 0.10), 3.8% fall in the highest susceptibility class, and 2.2% "
+  "are both. The remaining third of the release terrain is where the model declines to commit, and "
+  "a map that reported only panel (a) would present those cells with the same authority as the "
+  "rest.")
 table(["Class", "Area (km²)", "% of release area"],
       [["Very low", "6,125", "52.4"], ["Low", "2,167", "18.5"], ["Moderate", "1,314", "11.2"],
        ["High", "1,017", "8.7"], ["Very high", "1,077", "9.2"]],
-      [1.4, 1.3, 1.6], "Table 10. Susceptibility classes within potential release areas.")
-figure("fig_susceptibility_map",
-       "Figure 7. Avalanche susceptibility across the Chandra-Bhaga and Upper Beas basins, "
-       "restricted to potential release areas.", 6.4)
+      [1.4, 1.3, 1.6], "Table 12. Susceptibility classes within potential release areas.")
+figure("fig_map_susceptibility_uncertainty",
+       "Figure 7. Avalanche susceptibility (a) and the ensemble uncertainty attached to it (b), "
+       "both restricted to potential release areas. Published susceptibility maps give the left "
+       "panel alone, so a reader cannot distinguish a well-constrained hotspot from a guess.", 6.6)
 P("Excluding the coarse predictors changes 39% of class assignments (Pearson r = 0.761) but 71% of "
   "high and very-high pixels remain in those classes, indicating that the principal hotspots are "
   "terrain-controlled while the broader regional gradient is partly positional. The map reported "

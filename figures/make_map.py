@@ -44,8 +44,8 @@ def read(path, stride):
 
 def main(stride=3):
     set_pub_style()
-    sus, T, crs = read(os.path.join(RES, "susceptibility_v2.tif"), stride)
-    unc, _, _ = read(os.path.join(RES, "uncertainty_v2.tif"), stride)
+    sus, T, crs = read(os.path.join(RES, "susceptibility_v3.tif"), stride)
+    unc, _, _ = read(os.path.join(RES, "uncertainty_v3.tif"), stride)
     with rasterio.open(os.path.join(DATA, "processed", "base_utm",
                                     "base_nasadem_elevation.tif")) as d:
         dem = d.read(1)[::stride, ::stride].astype("float32")
