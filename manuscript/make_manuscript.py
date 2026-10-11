@@ -25,6 +25,7 @@ tr = pd.read_csv(os.path.join(RES, "transferability.csv"))
 ls = pd.read_csv(os.path.join(RES, "label_quality_sensitivity.csv"))
 sh = pd.read_csv(os.path.join(RES, "shap_importance.csv"))
 pv = pd.read_csv(os.path.join(RES, "precision_verification.csv"))
+pi = pd.read_csv(os.path.join(RES, "precision_by_inventory.csv"))
 fe = pd.read_csv(os.path.join(RES, "filter_effectiveness.csv"))
 cl = pd.read_csv(os.path.join(RES, "correction_ladder.csv"))
 
@@ -140,9 +141,11 @@ P(
     f"terrain-matched, spatially validated model attains AUC {d_xgb:.3f} and transfers between "
     f"sub-basins at {tr.roc_auc.mean():.3f}. Separately, blind optical verification — which this "
     "literature does not report for any inventory — puts the detections' precision at "
-    f"{100*pv.precision.iloc[0]:.0f}% ({pv.true_positives.iloc[0]}/{pv.n_judged.iloc[0]}); requiring "
-    "snow cover to persist after each event removes two thirds of the false positives without losing "
-    f"any verified avalanche, raising precision to {100*pv.precision.iloc[1]:.0f}%. We provide a "
+    f"{100*pi.precision.iloc[0]:.1f}% under an explicit scoring rule, against {100*pv.precision.iloc[0]:.1f}% "
+    "from an unaided first pass of the same images (Cohen's kappa 0.49 between the two), so the "
+    "verification is itself considerably less reliable than its absence from the literature implies. "
+    "Requiring snow cover to persist after each event removes 72% of the verified false positives "
+    f"without losing any verified avalanche, raising precision to {100*pi.precision.iloc[1]:.1f}%. We provide a "
     "corrected susceptibility map, as an illustration of the method rather than an operational "
     "product, and openly document two artefacts detected in our own pipeline. The sampling rule we "
     "test is a convention inherited across this literature rather than the choice of any one study, "
@@ -311,37 +314,52 @@ figure("fig_label_sensitivity",
        "Figure 3. The sampling artefact is independent of inventory size and label confidence.")
 
 H("4.3 How many detections are real?", 2)
-P("One hundred detections were sampled at random, twenty per month, and reviewed blind against "
-  "Sentinel-2 imagery from each detection's own acquisition window; thirty-one have been judged so "
-  "far. A detection counts as verified only when fresh debris appears inside the outline and the "
-  "surrounding slope is unchanged between the two dates. Cases obscured by cloud are recorded as "
-  "unjudgeable and excluded rather than counted as failures.")
-rows = [[r.inventory, int(r.true_positives), int(r.false_positives), int(r.n_judged),
-         f"{100*r.precision:.1f}%", f"[{100*r.ci_low:.0f}%, {100*r.ci_high:.0f}%]"]
+P("One hundred detections were drawn at random, twenty per month, and reviewed against Sentinel-2 "
+  "imagery from each detection's own acquisition window, shuffled so the reviewer could not see "
+  "which confidence tier a chip came from. They were scored twice. The first pass was unaided. The "
+  "second applied an explicit rule, after the first pass revealed that a permissive reading of "
+  "ambiguous chips had crept in: a detection counts as verified only if (i) snow is present on the "
+  "slope in the BEFORE image, since a bare slope has no snowpack to release, (ii) a localized, "
+  "rough, darker feature appears inside the outline in AFTER, and (iii) the surrounding slope is "
+  "essentially unchanged between the two dates. Frames too cloudy or washed out to assess are "
+  "recorded as unjudgeable and excluded rather than counted as failures.")
+rows = [[r.scoring, int(r.verified), int(r.rejected), int(r.unjudgeable),
+         f"{100*r.precision:.1f}%", f"[{100*r.ci_low:.1f}%, {100*r.ci_high:.1f}%]"]
         for _, r in pv.iterrows()]
-table(["Inventory", "verified", "false", "n", "precision", "95% CI"], rows,
-      [2.0, 0.9, 0.8, 0.5, 1.0, 1.4],
-      "Table 4. Blind optical verification of the Sentinel-1 detections.")
-P(f"Precision of the unfiltered detections is {100*pv.precision.iloc[0]:.1f}%. Nearly every false "
-  "positive is the same failure: between the two acquisitions the whole scene changes, as snow "
-  "falls across it or melts off it, and bare or wetted ground raises backscatter exactly as "
-  "avalanche debris does. Contrary to our expectation this is not confined to the ablation season — "
-  "verified failures include a February-to-March pair over which the snowpack disappeared "
-  "completely.")
+table(["Scoring", "verified", "rejected", "unjudgeable", "precision", "95% CI"], rows,
+      [1.8, 0.9, 0.9, 1.0, 1.0, 1.4],
+      "Table 4. Blind optical verification of 100 Sentinel-1 detections, scored twice.")
+P("The two scorings agree on 79 of 100 chips (Cohen's kappa 0.49) and differ by almost an order of "
+  "magnitude in the resulting precision. Every disagreement is a chip the first pass accepted and "
+  "the rule rejects, and they fall into a few repeated patterns: ten where the slope is bare rock "
+  "in the BEFORE image and acquires snow by the AFTER image — a snowfall, not a release — eight "
+  "where the entire frame darkens as the snowpack ablates, two with no visible change inside the "
+  "outline, and one whose BEFORE frame is blank cloud. We report both numbers because the gap "
+  "between them is itself a result: optical verification of SAR avalanche detections is far less "
+  "reliable than its routine absence from the literature would suggest, and a single unaided "
+  "reviewer can inflate apparent precision severalfold.")
+P("Under the stated rule, precision of the unfiltered detections is "
+  f"{100*pi.precision.iloc[0]:.1f}% ({int(pi.verified.iloc[0])}/{int(pi.n_judged.iloc[0])}). "
+  "Nearly every rejection is the same failure: between the two acquisitions the whole scene "
+  "changes, as snow falls across it or melts off it, and bare or wetted ground raises backscatter "
+  "exactly as avalanche debris does. Contrary to our expectation this is not confined to the "
+  "ablation season — rejected detections include a February-to-March pair over which the snowpack "
+  "disappeared completely, and ten January detections on slopes that were bare rock days earlier.")
 rows = [[r.verdict, int(r.judged), int(r.removed_by_filter), f"{r.pct_removed:.0f}%"]
         for _, r in fe.iterrows()]
 table(["Reviewed as", "n", "removed by filter", "% removed"], rows, [2.2, 0.6, 1.4, 1.0],
       "Table 5. Effect of the snow-persistence filter on the reviewed detections.")
-P("Requiring MODIS snow cover to persist after each event removes two thirds of the verified false "
-  f"positives and none of the verified avalanches, raising precision to "
-  f"{100*pv.precision.iloc[1]:.1f}% and shrinking the inventory from 7,055 to 2,064 events. The "
-  "sample of verified avalanches is small, so the precision interval remains wide; the filter's "
-  "selectivity — which failure modes it removes and which detections it preserves — is the stronger "
-  "evidence, and it is the quantity a susceptibility study actually depends on.")
+P("Requiring MODIS snow cover to persist after each event removes 72% of the verified false "
+  "positives and none of the three verified avalanches, raising precision to "
+  f"{100*pi.precision.iloc[1]:.1f}% and shrinking the inventory from 7,055 to 2,064 events. With so "
+  "few confirmed avalanches the precision interval is wide and the point estimate should not be "
+  "read closely; the filter's selectivity — which failure mode it removes and which detections it "
+  "preserves — is the more robust quantity, and it is the one a susceptibility study depends on.")
 P("We report these figures because this literature does not. Published inventories in the region "
-  "are presented without a precision estimate, so the proportion of training labels that are real "
-  "avalanches is unknown in every study we reproduce. Section 4.1 shows why that matters less than "
-  "it appears for our central result and more than it appears for the maps built on such inventories.")
+  "carry no precision estimate, so the proportion of training labels that are genuine avalanches is "
+  "unknown in every study we reproduce — possibly far higher than ours, since those inventories are "
+  "field-verified, but unknown nonetheless. Section 4.1 shows why that matters less than it appears "
+  "for the central result and more than it appears for the maps built on such inventories.")
 
 H("4.4 Model comparison under honest validation", 2)
 rows = []
@@ -523,16 +541,19 @@ P("We tested whether adding a Winstral wind-shelter index — the dominant snow-
 
 H("5.4 Limitations", 2)
 bullets([
-    "Inventory precision is low and is measured rather than assumed: 6.9% unfiltered and 18.2% "
-    "after the snow-persistence filter, on 31 blind optical judgements. The detections are "
-    "candidate avalanche-prone slopes, not confirmed events, and every result resting on them "
-    "inherits that. Agreement between independent ascending and descending geometries is 17.8% on "
+    "Inventory precision is low and is measured rather than assumed: 3.4% unfiltered and 11.1% "
+    "after the snow-persistence filter, on 100 blind optical judgements scored against an explicit "
+    "rule. The detections are candidate avalanche-prone slopes, not confirmed events, and every "
+    "result resting on them inherits that. In particular, a model trained on labels this noisy is "
+    "learning terrain that covaries with where the detector fires, which is not the same thing as "
+    "avalanche release; the susceptibility map in Section 4.11 is presented on that understanding. Agreement between independent ascending and descending geometries is 17.8% on "
     "aspects both observe well, consistent with the direct measurement. Recall at eight sites named "
     "in the reference study is 6/8 against 4/12 at randomly chosen steep sites — suggestive, but "
     "not significant at this sample size.",
-    "The verified sample contains only two confirmed avalanches, so the precision interval is wide "
-    "and the filter's measured selectivity carries more weight than the point estimate. Completing "
-    "the remaining judgements would narrow it.",
+    "The verified sample contains only three confirmed avalanches, so the precision interval is "
+    "wide and the filter's measured selectivity carries more weight than the point estimate. "
+    "Independent scoring by a second reviewer, or higher-resolution imagery, would constrain both "
+    "the precision and the disagreement between scorings.",
     "Release points are inferred by upslope tracing rather than observed.",
     "Lithology and lineaments are taken from global datasets (GLiM, GEM) rather than the national "
     "geological survey products used in the reference study, so importance values for these "
