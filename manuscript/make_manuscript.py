@@ -113,6 +113,22 @@ a.alignment = WD_ALIGN_PARAGRAPH.CENTER
 r = a.add_run("Chandra-Bhaga and Upper Beas basins, Himachal Pradesh and Jammu & Kashmir, India")
 r.italic = True
 r.font.size = Pt(10)
+
+au = doc.add_paragraph()
+au.alignment = WD_ALIGN_PARAGRAPH.CENTER
+r = au.add_run("Sanskar Gupta")
+r.bold = True
+r.font.size = Pt(12)
+af = doc.add_paragraph()
+af.alignment = WD_ALIGN_PARAGRAPH.CENTER
+r = af.add_run("School of Computer Science Engineering and Technology, Bennett University, "
+               "Greater Noida, Uttar Pradesh, India")
+r.font.size = Pt(9.5)
+em = doc.add_paragraph()
+em.alignment = WD_ALIGN_PARAGRAPH.CENTER
+r = em.add_run("Correspondence: Sanskar.in127@gmail.com")
+r.font.size = Pt(9.5)
+r.italic = True
 doc.add_paragraph()
 
 # ---------------------------------------------------------------- abstract
@@ -191,11 +207,20 @@ P("We take Abhinav and Sattar (2025) as the reference implementation because it 
 
 # ---------------------------------------------------------------- 2 study area
 H("2. Study area", 1)
-P("The Chandra-Bhaga and Upper Beas basins span approximately 23,000 km² in Himachal Pradesh and "
-  "the Jammu & Kashmir union territory, with elevations from 1,123 m to 6,329 m. The region "
-  "receives heavy winter snowfall from westerly disturbances and has a documented history of "
-  "avalanche impacts on the Leh–Manali highway and on settlements including Manali, Keylong and "
-  "Udaipur. Potential release terrain (slope 28–60°) covers 11,699 km², about half the study area.")
+P("The Chandra-Bhaga and Upper Beas basins lie in Himachal Pradesh and the Jammu & Kashmir union "
+  "territory, in the Western Himalaya. The region receives heavy winter snowfall from westerly "
+  "disturbances and has a documented history of avalanche impacts on the Leh–Manali highway and on "
+  "settlements including Manali, Keylong and Udaipur.")
+P("All analysis is carried out over a rectangular extent covering both basins, 76.40–78.10° E and "
+  "31.90–33.20° N, rather than over hydrologically delineated basin outlines. The extent therefore "
+  "includes some terrain beyond the two catchments, and spans 554–6,565 m against the 1,123–6,329 m "
+  "usually quoted for the basins themselves. Potential release terrain — slope between 28 and 60°, "
+  "after Bühler et al. (2018) — covers 11,705 km², roughly half the extent, and every areal "
+  "statistic reported in Section 4 refers to that domain rather than to the full rectangle.")
+figure("fig_study_area",
+       "Figure 1. The analysis extent, with elevation over hillshade and the settlements and passes "
+       "named in the regional avalanche literature. Avalanche terrain here spans more than five "
+       "kilometres of relief.", 6.4)
 
 # ---------------------------------------------------------------- 3 data & methods
 H("3. Data and methods", 1)
@@ -272,7 +297,7 @@ P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully
   f"{abs(float(cl.delta.iloc[4])):.3f}, roughly six times as much. Inventory precision is not "
   "reported at all in the studies we reproduce, so this term is invisible in published work.")
 figure("fig_correction_ladder",
-       "Figure 1. Cumulative effect of each correction. Label quality removes more apparent skill "
+       "Figure 2. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
 H("4.2 Where reported performance comes from", 2)
@@ -294,7 +319,7 @@ P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:
   f"changes performance by {a_xgb - b_xgb:+.3f}. The optimism is therefore attributable to sampling "
   "design, and essentially not at all to spatial autocorrelation.")
 figure("fig_leakage_decomposition",
-       "Figure 2. Decomposition of reported performance. Paper-style absences produce perfect "
+       "Figure 3. Decomposition of reported performance. Paper-style absences produce perfect "
        "separation regardless of the cross-validation scheme.")
 
 P("This result does not depend on the quality of our inventory. Repeating the contrast at four "
@@ -311,7 +336,7 @@ table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], ro
       [1.0, 1.1, 1.1, 1.2, 1.1],
       "Table 3. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
-       "Figure 3. The sampling artefact is independent of inventory size and label confidence.")
+       "Figure 4. The sampling artefact is independent of inventory size and label confidence.")
 
 H("4.3 How many detections are real?", 2)
 P("One hundred detections were drawn at random, twenty per month, and reviewed against Sentinel-2 "
@@ -378,7 +403,7 @@ P("Gradient-boosted trees outperform the Random Forest used in the reference stu
   "+0.0003, 95% CI −0.0013 to +0.0018). Reporting a single best model is not supportable at this "
   "sample size, and by extension neither are the four-way model rankings published on inventories "
   "of around one hundred points.")
-figure("fig_model_ci", "Figure 4. Model ranking with bootstrap confidence intervals.", 5.4)
+figure("fig_model_ci", "Figure 5. Model ranking with bootstrap confidence intervals.", 5.4)
 
 H("4.5 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
@@ -394,7 +419,7 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
   "duration among the leading predictors may therefore be describing a geographic index rather "
   "than snowpack process.")
-figure("fig_geography_ablation", "Figure 5. Coarse predictors are interchangeable with coordinates.", 6.4)
+figure("fig_geography_ablation", "Figure 6. Coarse predictors are interchangeable with coordinates.", 6.4)
 
 H("4.6 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
@@ -419,7 +444,7 @@ P(f"Transfer performance is symmetric and approximately 0.05 below within-region
   "indicating that the model generalises to terrain it has not seen rather than memorising local "
   "configurations.")
 figure("fig_transfer_shap",
-       "Figure 6. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
+       "Figure 7. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
 
 H("4.8 The operating point shifts under spatial validation", 2)
 P("Thresholding at 0.5 is conventional but carries no meaning for a presence-background model "
@@ -493,7 +518,7 @@ table(["Class", "Area (km²)", "% of release area"],
        ["High", "1,017", "8.7"], ["Very high", "1,077", "9.2"]],
       [1.4, 1.3, 1.6], "Table 12. Susceptibility classes within potential release areas.")
 figure("fig_map_susceptibility_uncertainty",
-       "Figure 7. Avalanche susceptibility (a) and the ensemble uncertainty attached to it (b), "
+       "Figure 8. Avalanche susceptibility (a) and the ensemble uncertainty attached to it (b), "
        "both restricted to potential release areas. Published susceptibility maps give the left "
        "panel alone, so a reader cannot distinguish a well-constrained hotspot from a guess.", 6.6)
 P("Excluding the coarse predictors changes 39% of class assignments (Pearson r = 0.761) but 71% of "
@@ -599,6 +624,21 @@ P("All code is openly available at https://github.com/sanskarprime392-png/avalan
   "inventory derived in this study, the trained susceptibility rasters and all result tables are "
   "reproducible from that repository using openly licensed input data (NASADEM, Sentinel-1, "
   "Sentinel-2, WorldClim, MODIS, ESA WorldCover, OpenStreetMap, GEM Global Active Faults).")
+
+H("Author contributions", 1)
+P("S.G. designed the study, built the Sentinel-1 inventory, carried out the analysis and the "
+  "optical verification, and wrote the manuscript.")
+
+H("Competing interests", 1)
+P("The author declares no competing interests.")
+
+H("Acknowledgements", 1)
+P("The controlled decomposition in Section 4.1 — separating the contribution of absence sampling "
+  "from that of spatial autocorrelation — was proposed in review by [SUPERVISOR NAME], whose "
+  "comments also shaped the treatment of coarse-resolution predictors in Section 4.5. Analysis "
+  "code was developed with the assistance of a large language model; the author designed the "
+  "study, directed the analysis, performed the verification, and is responsible for all results "
+  "and conclusions. This work received no specific funding.")
 
 H("References", 1)
 for i, r in enumerate([
