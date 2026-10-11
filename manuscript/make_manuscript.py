@@ -443,96 +443,99 @@ P("Neither conventional route to a better score helped. A nested cross-validated
 # ---------------------------------------------------------------- 5 discussion
 H("5. Discussion", 1)
 
-H("5.1 Implications for the literature", 2)
-P("The decomposition indicates that high AUC values in IHR avalanche susceptibility studies are "
-  "primarily a property of how non-avalanche points are drawn. Because the same absence rule recurs "
-  "across this literature, the finding is not specific to any one study, and it is not a claim that "
-  "any published model is incorrectly implemented. A classifier trained against flat, vegetated, "
-  "urban and cropland absences does what it was asked to do; the difficulty is that the question it "
-  "answers — can steep snow-covered terrain be told apart from flat green valley floor — is not the "
-  "question a susceptibility map is read as answering. The same applies to our own models, which is "
-  "why Section 4.1 reports what the conventional protocol yields on our data rather than only what "
-  "our preferred protocol yields.")
-P("The practical recommendation is therefore not that published maps be discarded, but that "
-  "absence selection be reported and justified as carefully as model choice currently is, and that "
-  "a terrain-matched comparison be given alongside any headline figure. Spatial cross-validation, "
-  "while methodologically correct, addresses the smaller of the two problems: in our data it "
-  "accounts for essentially none of the optimism once sampling is fixed.")
+H("5.1 What a reported AUC can and cannot tell a reader", 2)
+P("Susceptibility data are presence-only: the locations of past events are observed, and the "
+  "absences are constructed by the analyst. Section 4.1 shows that this construction, not the "
+  "model, sets most of the reported score — a model with no skill at all reaches 0.910 at two "
+  "standard deviations of absence displacement and 1.000 at six. Two consequences follow, and "
+  "neither is specific to avalanches.")
+P("First, AUC is not comparable between studies that drew their absences differently. A study "
+  "reporting 0.97 with absences taken from flat farmland has not demonstrated more skill than one "
+  "reporting 0.85 with absences on comparable terrain; on the evidence here it has probably "
+  "demonstrated less. Model comparisons, predictor rankings and claims of improvement over prior "
+  "work all inherit this, because all of them rest on a quantity that the sampling design has "
+  "already largely determined.")
+P("Second, above roughly three standard deviations of separation the measure saturates and stops "
+  "discriminating at all: in the simulation a model with genuine skill and a model with none both "
+  "report values above 0.97. Much of the published literature appears to operate in that regime. "
+  "The practical recommendation is not that existing maps be discarded — a map can be useful "
+  "without its headline statistic being meaningful — but that absence selection be reported and "
+  "justified as carefully as model selection currently is, and that the two quantities introduced "
+  "here be reported alongside AUC.")
 
-H("5.2 An artefact in our own pipeline", 2)
-P("SHAP attributed the largest single contribution to the topographic position index, at "
-  f"{sh.mean_abs_shap.iloc[0]:.2f}, roughly twice the next predictor. Inspection showed presence "
-  "points average TPI +36.4 against +2.9 for background, which follows mechanically from our "
-  "release-point rule: selecting the highest qualifying pixel within a search radius necessarily "
-  "produces points at locally elevated topographic positions. The apparent importance was created "
-  "by our own method. Excluding TPI costs 0.005 AUC, and it is excluded from all results reported "
-  "here. We report this because the same class of error is what the study identifies elsewhere.")
+H("5.2 A correction that studies can apply to themselves", 2)
+P("Both quantities are cheap to compute. The separability δ is a standardised distance between the "
+  "presence and absence clouds in predictor space and requires only the study's own training "
+  "table. The null baseline is a simulation at that δ, which takes seconds. Their difference — the "
+  "skill a model contributes above what its sampling design already delivers — is the number a "
+  "reader assumes AUC reports. Code for both is released with this paper.")
+P("The correction is deliberately conservative. It does not claim to recover a model's true "
+  "accuracy, only to remove a component of the reported score that is attributable to the "
+  "experimental design rather than to the model. Where a design is so separable that a null model "
+  "already scores 1.000, the correction returns zero and the honest conclusion is that the study "
+  "has not measured predictive skill at all.")
 
-H("5.3 A trade-off specific to SAR-derived inventories", 2)
-P("We tested whether adding a Winstral wind-shelter index — the dominant snow-loading control, and "
-  "absent from the predictor sets of the studies reproduced here — improves performance. It does "
-  "not (terrain-only 0.902 to 0.906; full model 0.934 to 0.935, both within confidence intervals). "
-  "The reason is structural: the shelter index correlates −0.949 with eastness, so matching "
-  "background points on aspect in order to remove the Sentinel-1 look-direction artefact "
-  "simultaneously equalises wind exposure. A SAR-derived inventory can support an unbiased aspect "
-  "distribution or the study of aspect-dependent processes, but not both. Resolving this requires "
-  "radiometric terrain flattening rather than distributional matching.")
+H("5.3 Applying the same standard to our own analysis", 2)
+P("Two artefacts of our own are reported because the argument demands it. SHAP attributed the "
+  "largest single contribution to the topographic position index; inspection showed presence "
+  "points averaged TPI +36.4 against +2.9 for background, which follows mechanically from an "
+  "earlier release-point rule that selected the highest qualifying pixel in a search radius. "
+  "Deriving release points as the centroid of release-angle terrain instead reduced that gap to "
+  "+3.8 and made the predictor ordinary again.")
+P("The second concerns the optical verification used to establish label quality for the corrected "
+  "configuration. An unaided first pass over 100 detections accepted 24 as avalanches; re-scoring "
+  "against an explicit rule — snow present beforehand, a localized rough feature appearing, "
+  "surroundings unchanged — rejected 21 of those, most because the slope was bare rock before the "
+  "event and acquired snow afterwards. Both scorings are reported in the companion paper, and the "
+  "disagreement between them (Cohen's kappa 0.49) is treated there as a result rather than an "
+  "embarrassment. Neither artefact changes the findings above, which compare sampling designs "
+  "using identical labels, but a paper arguing that this field does not audit its own procedures "
+  "cannot exempt itself.")
 
 H("5.4 Limitations", 2)
 bullets([
-    "Inventory precision is low and is measured rather than assumed: 3.4% unfiltered and 11.1% "
-    "after the snow-persistence filter, on 100 blind optical judgements scored against an explicit "
-    "rule. The detections are candidate avalanche-prone slopes, not confirmed events, and every "
-    "result resting on them inherits that. The model should therefore be read as predicting terrain "
-    "favourable to the activity the detector registers, rather than verified release locations, and "
-    "the susceptibility map in Section 4.11 is presented on that understanding. This limit is not "
-    "specific to our inventory: no published susceptibility study in the region reports a precision "
-    "estimate, so the same caveat applies to every model trained on them — the difference is that "
-    "ours is quantified. Agreement between independent ascending and descending geometries is 17.8% on "
-    "aspects both observe well, consistent with the direct measurement. Recall at eight sites named "
-    "in the reference study is 6/8 against 4/12 at randomly chosen steep sites — suggestive, but "
-    "not significant at this sample size.",
-    "The verified sample contains only three confirmed avalanches, so the precision interval is "
-    "wide and the filter's measured selectivity carries more weight than the point estimate. "
-    "Independent scoring by a second reviewer, or higher-resolution imagery, would constrain both "
-    "the precision and the disagreement between scorings.",
-    "Release points are inferred by upslope tracing rather than observed.",
-    "Lithology and lineaments are taken from global datasets (GLiM, GEM) rather than the national "
-    "geological survey products used in the reference study, so importance values for these "
-    "predictors are not directly comparable.",
-    "Because the model is fitted at an arbitrary presence-background prevalence, outputs are a "
-    "relative index rather than probabilities.",
-    "Projection of future susceptibility under climate scenarios was considered and rejected: "
-    "Section 4.3 shows the coarse climate predictors carry positional rather than physical "
-    "information, so propagating them forward would project a spatial trend surface.",
+    "The simulation establishes that absence displacement inflates AUC and provides a baseline at "
+    "a given separability. It does not model every way a real absence design can differ from the "
+    "presences — spatial clustering, differing covariance structure and non-Gaussian predictor "
+    "distributions are all simplified — so the baseline should be read as an approximation rather "
+    "than an exact correction.",
+    "The separability measure aggregates standardised differences across predictors and therefore "
+    "depends on which predictors a study uses. Two studies with identical absence rules but "
+    "different predictor sets will report different δ.",
+    "The empirical test uses one study area and one hazard. The mechanism is not specific to "
+    "either, but demonstrating that requires replication on independent inventories, ideally for "
+    "landslides, where open data are more plentiful. We regard this as the most valuable next step.",
+    "The avalanche inventory underlying the empirical sections is derived from Sentinel-1 change "
+    "detection and consists of candidate rather than confirmed events; its precision is quantified "
+    "in the companion paper. Because every configuration compared here uses identical labels, "
+    "label quality affects all arms equally and cannot produce the differences reported, as the "
+    "sensitivity analysis in Section 4.3 confirms.",
 ])
 
 # ---------------------------------------------------------------- 6 conclusions
 H("6. Conclusions", 1)
 bullets([
-    f"Reproducing the negative-sampling rule used across IHR avalanche susceptibility studies "
-    f"yields AUC = {a_xgb:.3f}. The task becomes perfectly separable, and reported performance "
-    f"reflects sampling design rather than predictive skill.",
-    f"Spatial-block cross-validation changes performance by {a_xgb - b_xgb:+.3f} under that "
-    "sampling design. The field's principal methodological correction addresses the smaller "
-    "problem.",
-    f"Blind optical verification puts the precision of the Sentinel-1 detections at "
-    f"{100*pv.precision.iloc[0]:.1f}% unfiltered and {100*pv.precision.iloc[1]:.1f}% once snow cover "
-    "is required to persist after each event, the first such measurement we are aware of for an "
-    "avalanche inventory in this region. Published inventories here carry no precision estimate, so "
-    "the proportion of training labels that are genuine avalanches is unknown in every study we "
-    "reproduce, including in the sense that it may be considerably higher than ours.",
-    "Coarse climate and snow-cover predictors are statistically interchangeable with raw spatial "
-    "coordinates and should not be interpreted as snowpack process.",
-    "Reported AUC can be increased by raising the background sampling ratio while precision-recall "
-    "performance declines; both should be reported.",
-    f"A terrain-matched, spatially validated model attains AUC {d_xgb:.3f} "
-    f"[{mt[(mt.model=='xgb')&(mt.cv=='spatial')].ci_low.iloc[0]:.3f}, "
-    f"{mt[(mt.model=='xgb')&(mt.cv=='spatial')].ci_high.iloc[0]:.3f}] and transfers between "
-    f"sub-basins at {tr.roc_auc.mean():.3f}.",
+    "Susceptibility data are presence-only, so absences are an analyst's choice. In synthetic data "
+    "where that choice carries no information about the outcome, a model with no predictive skill "
+    "reports AUC 0.739 at one standard deviation of absence displacement, 0.910 at two and 1.000 "
+    "at six. Reported AUC is therefore a function of the sampling design.",
+    "Above roughly three standard deviations the measure saturates: a model with genuine skill and "
+    "one with none both report values above 0.97, so AUC no longer distinguishes them.",
+    "Measured on that scale, a published avalanche susceptibility protocol places its absences "
+    "7.06 standard deviations from its presences, where a null model is predicted to score 1.000. "
+    "Run on an independent inventory, the protocol returns 1.000.",
+    "Removing each design's own contribution leaves +0.000 for the published protocol, +0.027 for "
+    "terrain-matched absences and +0.108 for aspect-matched absences with corrected labels. "
+    "Reported AUC ranks these configurations in exactly the reverse order of what the models "
+    "contribute.",
+    "Two independent diagnostics agree: 1 km climate and 500 m snow-cover predictors are "
+    "statistically interchangeable with raw spatial coordinates, and reported AUC rises with the "
+    "background sampling ratio while precision-recall performance falls.",
+    "We recommend that susceptibility studies report absence separability and design-adjusted "
+    "skill alongside AUC. Both are inexpensive, both use only a study's own training data, and "
+    "code for both is released.",
 ])
 
-# ---------------------------------------------------------------- data / code
 H("Data and code availability", 1)
 P("All code is openly available at https://github.com/sanskarprime392-png/avalanche. The avalanche "
   "inventory derived in this study, the trained susceptibility rasters and all result tables are "
@@ -559,19 +562,34 @@ for i, r in enumerate([
     "Abhinav, A. & Sattar, A. (2025). Snow avalanche susceptibility, hazard, and exposure "
     "assessment in the Western Himalaya using machine learning and numerical modelling. Scientific "
     "Reports, 15, 38093.",
+    "Barbet-Massin, M., Jiguet, F., Albert, C. H. & Thuiller, W. (2012). Selecting pseudo-absences "
+    "for species distribution models: how, where and how many? Methods in Ecology and Evolution, "
+    "3, 327-338.",
     "Bühler, Y., von Rickenbach, D., Stoffel, A., Margreth, S., Stoffel, L. & Christen, M. (2018). "
     "Automated snow avalanche release area delineation. Natural Hazards and Earth System Sciences, "
-    "18, 3235–3251.",
+    "18, 3235-3251.",
+    "Cetinkaya, S. & Kocaman, S. (2023). Impact of learning set and sampling for snow avalanche "
+    "susceptibility mapping with random forest. ISPRS Archives, XLVIII-M-1, 57-64.",
     "Eckerstorfer, M., Vickers, H., Malnes, E. & Grahn, J. (2019). Near-real time automatic snow "
-    "avalanche activity monitoring system using Sentinel-1 SAR data in Norway. Remote Sensing, 11, 2863.",
-    "Grinsztajn, L., Oyallon, E. & Varoquaux, G. (2022). Why do tree-based models still outperform "
-    "deep learning on tabular data? Advances in Neural Information Processing Systems.",
+    "avalanche activity monitoring system using Sentinel-1 SAR data in Norway. Remote Sensing, 11, "
+    "2863.",
+    "Elkan, C. & Noto, K. (2008). Learning classifiers from only positive and unlabeled data. "
+    "Proceedings of the 14th ACM SIGKDD International Conference on Knowledge Discovery and Data "
+    "Mining, 213-220.",
+    "Lobo, J. M., Jiménez-Valverde, A. & Real, R. (2008). AUC: a misleading measure of the "
+    "performance of predictive distribution models. Global Ecology and Biogeography, 17, 145-151.",
+    "Phillips, S. J., Dudík, M., Elith, J., Graham, C. H., Lehmann, A., Leathwick, J. & Ferrier, S. "
+    "(2009). Sample selection bias and presence-only distribution models. Ecological Applications, "
+    "19, 181-197.",
     "Ploton, P. et al. (2020). Spatial validation reveals poor predictive performance of "
     "large-scale ecological mapping models. Nature Communications, 11, 4540.",
     "Roberts, D. R. et al. (2017). Cross-validation strategies for data with temporal, spatial, "
-    "hierarchical, or phylogenetic structure. Ecography, 40, 913–929.",
+    "hierarchical, or phylogenetic structure. Ecography, 40, 913-929.",
+    "Sahin, E. K., Ipbuker, C. & Kavzoglu, T. (2023). Strategies for sampling pseudo-absences of "
+    "landslide locations for landslide susceptibility mapping in complex mountainous terrain of "
+    "Northwest Himalaya. Bulletin of Engineering Geology and the Environment, 82, 397.",
     "Winstral, A., Elder, K. & Davis, R. E. (2002). Spatial snow modeling of wind-redistributed "
-    "snow using terrain-based parameters. Journal of Hydrometeorology, 3, 524–538.",
+    "snow using terrain-based parameters. Journal of Hydrometeorology, 3, 524-538.",
 ], 1):
     doc.add_paragraph(f"[{i}]  {r}", style="List Paragraph")
 
