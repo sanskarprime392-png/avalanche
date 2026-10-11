@@ -95,13 +95,15 @@ def figure(name, caption, width=6.0):
 # ---------------------------------------------------------------- title
 t = doc.add_paragraph()
 t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-r = t.add_run("Are machine-learning avalanche susceptibility maps learning avalanche physics?")
+r = t.add_run("Reported accuracy in avalanche susceptibility mapping reflects sampling design, "
+              "not predictive skill")
 r.bold = True
 r.font.size = Pt(17)
 r.font.color.rgb = NAVY
 s = doc.add_paragraph()
 s.alignment = WD_ALIGN_PARAGRAPH.CENTER
-r = s.add_run("Sampling design, spatial validation and explainability in the Western Himalaya")
+r = s.add_run("A controlled reproduction with an independently verified Sentinel-1 inventory, "
+              "Western Himalaya")
 r.font.size = Pt(12.5)
 a = doc.add_paragraph()
 a.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -134,13 +136,15 @@ P(
     "interchangeable with raw spatial coordinates, and that reported AUC can be raised simply by "
     "increasing the background sampling ratio while precision-recall performance falls. A "
     f"terrain-matched, spatially validated model attains AUC {d_xgb:.3f} and transfers between "
-    f"sub-basins at {tr.roc_auc.mean():.3f}. Blind optical verification of the detections, which this "
-    "literature does not report, puts their precision at "
+    f"sub-basins at {tr.roc_auc.mean():.3f}. Separately, blind optical verification — which this "
+    "literature does not report for any inventory — puts the detections' precision at "
     f"{100*pv.precision.iloc[0]:.0f}% ({pv.true_positives.iloc[0]}/{pv.n_judged.iloc[0]}); requiring "
     "snow cover to persist after each event removes two thirds of the false positives without losing "
     f"any verified avalanche, raising precision to {100*pv.precision.iloc[1]:.0f}%. We provide a "
-    "corrected susceptibility map restricted to potential release areas, and openly document two "
-    "artefacts detected in our own pipeline.")
+    "corrected susceptibility map, as an illustration of the method rather than an operational "
+    "product, and openly document two artefacts detected in our own pipeline. The sampling rule we "
+    "test is a convention inherited across this literature rather than the choice of any one study, "
+    "and the corrections we propose apply equally to our own results.")
 
 P("Keywords: snow avalanches, susceptibility mapping, sampling bias, spatial cross-validation, "
   "Sentinel-1, explainable machine learning, Western Himalaya", italic=True, size=9.5)
@@ -163,7 +167,22 @@ P("This study asks which of these two design choices actually drives reported pe
   "whether the resulting models encode avalanche physics or study-design artefacts. We address it "
   "with a controlled 2×2 experiment on an independently constructed inventory, followed by "
   "explainability and ablation diagnostics. We apply the same scrutiny to our own pipeline and "
-  "report an artefact we found there.")
+  "report two artefacts we found there.")
+H("1.1 Scope and intent", 2)
+P("What is under test here is a PROTOCOL, not a paper. The absence rule examined below recurs "
+  "throughout avalanche susceptibility work in the region: the study we reproduce cites earlier "
+  "applications reporting AUC values of 0.88 and 0.87 built the same way. Our results therefore "
+  "speak to a convention the field has inherited, and they apply to our own models exactly as they "
+  "apply to published ones — Section 4.1 reports what happens when we run the conventional protocol "
+  "on our own data, and the answer is a perfect score.")
+P("We take Abhinav and Sattar (2025) as the reference implementation because it is recent, it covers "
+  "these basins, and it documents its predictors, models and sampling clearly enough to be rebuilt "
+  "independently. That is not true of every study in this area, and reproducing a result is only "
+  "possible when the original is reported carefully. Where our figures differ from theirs, the "
+  "difference reflects the experimental design we impose rather than an error on their part: a model "
+  "trained against flat, vegetated absences is answering a different and easier question than one "
+  "trained against terrain-matched background, and neither number is wrong for the question it "
+  "answers.")
 
 # ---------------------------------------------------------------- 2 study area
 H("2. Study area", 1)
@@ -269,75 +288,7 @@ table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], ro
 figure("fig_label_sensitivity",
        "Figure 2. The sampling artefact is independent of inventory size and label confidence.")
 
-H("4.2 Model comparison under honest validation", 2)
-rows = []
-for mk in ("lgbm", "xgb", "rf", "svm_rbf", "logreg"):
-    rnd = mt[(mt.model == mk) & (mt.cv == "random")].iloc[0]
-    spa = mt[(mt.model == mk) & (mt.cv == "spatial")].iloc[0]
-    rows.append([NICE[mk], f"{rnd.roc_auc:.3f}",
-                 f"{spa.roc_auc:.3f} [{spa.ci_low:.3f}, {spa.ci_high:.3f}]",
-                 f"{spa.pr_auc:.3f}", f"{spa.accuracy:.3f}", f"{spa.kappa:.3f}"])
-table(["Model", "AUC (random)", "AUC (spatial, 95% CI)", "PR-AUC", "Accuracy", "Kappa"], rows,
-      [1.3, 1.1, 1.7, 0.8, 0.9, 0.7],
-      "Table 3. Model performance with terrain-matched absences (20 predictors, TPI excluded).")
-P("Gradient-boosted trees outperform the Random Forest used in the reference study, but LightGBM "
-  "and XGBoost are statistically indistinguishable from one another (paired bootstrap ΔAUC "
-  "+0.0003, 95% CI −0.0013 to +0.0018). Reporting a single best model is not supportable at this "
-  "sample size, and by extension neither are the four-way model rankings published on inventories "
-  "of around one hundred points.")
-figure("fig_model_ci", "Figure 3. Model ranking with bootstrap confidence intervals.", 5.4)
-
-H("4.3 Coarse predictors encode geography, not snowpack", 2)
-rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
-        for _, r in ga.iterrows()]
-table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 4. Replacing coarse predictors with raw spatial coordinates.")
-full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
-repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
-P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
-  f"coordinates changes performance from {full:.3f} to {repl:.3f}, a difference well within the "
-  "confidence intervals. These predictors contribute to the model, but their contribution is "
-  "positional rather than physical: at their native resolution they are smooth regional trend "
-  "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
-  "duration among the leading predictors may therefore be describing a geographic index rather "
-  "than snowpack process.")
-figure("fig_geography_ablation", "Figure 4. Coarse predictors are interchangeable with coordinates.", 6.4)
-
-H("4.4 Reported AUC depends on the background sampling ratio", 2)
-rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
-        for _, r in br.iterrows()]
-table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
-      [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 5. Effect of the background sampling ratio.")
-P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
-  f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
-  f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
-  "than a property of the landscape, a headline AUC can be improved by a sampling decision while "
-  "the model becomes less useful for the operational task. Precision-recall metrics should be "
-  "reported alongside AUC.")
-
-H("4.5 Spatial transferability", 2)
-rows = [[r.transfer.replace("north", "Chandra-Bhaga").replace("south", "Upper Beas"),
-         f"{int(r.n_train):,}", f"{int(r.n_test):,}",
-         f"{r.roc_auc:.3f} [{r.ci_low:.3f}, {r.ci_high:.3f}]"] for _, r in tr.iterrows()]
-table(["Transfer", "n train", "n test", "AUC (95% CI)"], rows, [2.2, 1.0, 1.0, 1.7],
-      "Table 6. Training on one sub-basin and testing on the other.")
-P(f"Transfer performance is symmetric and approximately 0.05 below within-region performance, "
-  "indicating that the model generalises to terrain it has not seen rather than memorising local "
-  "configurations.")
-figure("fig_transfer_shap",
-       "Figure 5. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
-
-H("4.6 Calibration", 2)
-P("Predicted scores are informative but not calibrated probabilities: the Brier score is 0.1034, "
-  "isotonic regression recovers only 3.5% of it, and the maximum deviation between predicted and "
-  "observed frequency across quantile bins is 0.099, with under-prediction at low scores and "
-  "over-prediction at high scores. Because presence-background models are fitted at an arbitrary "
-  "prevalence, susceptibility values should be interpreted as a relative index, not as "
-  "P(avalanche) — a distinction lost when raw scores are binned by natural breaks and presented as "
-  "hazard classes.")
-
-H("4.7 How many detections are real?", 2)
+H("4.2 How many detections are real?", 2)
 P("One hundred detections were sampled at random, twenty per month, and reviewed blind against "
   "Sentinel-2 imagery from each detection's own acquisition window; thirty-one have been judged so "
   "far. A detection counts as verified only when fresh debris appears inside the outline and the "
@@ -370,12 +321,86 @@ P("We report these figures because this literature does not. Published inventori
   "avalanches is unknown in every study we reproduce. Section 4.1 shows why that matters less than "
   "it appears for our central result and more than it appears for the maps built on such inventories.")
 
-H("4.8 Susceptibility map", 2)
-P("The final map applies XGBoost with terrain-matched sampling and is restricted to potential "
-  "release areas (slope 28–60°), covering 11,699 km². Restricting the domain matters for "
-  "comparability: classifying valley floors and lake surfaces as low susceptibility inflates the "
-  "denominator, so the commonly quoted statistic 'x% of the basin is highly susceptible' is not "
-  "comparable between studies unless the domain is stated.")
+H("4.3 Model comparison under honest validation", 2)
+rows = []
+for mk in ("lgbm", "xgb", "rf", "svm_rbf", "logreg"):
+    rnd = mt[(mt.model == mk) & (mt.cv == "random")].iloc[0]
+    spa = mt[(mt.model == mk) & (mt.cv == "spatial")].iloc[0]
+    rows.append([NICE[mk], f"{rnd.roc_auc:.3f}",
+                 f"{spa.roc_auc:.3f} [{spa.ci_low:.3f}, {spa.ci_high:.3f}]",
+                 f"{spa.pr_auc:.3f}", f"{spa.accuracy:.3f}", f"{spa.kappa:.3f}"])
+table(["Model", "AUC (random)", "AUC (spatial, 95% CI)", "PR-AUC", "Accuracy", "Kappa"], rows,
+      [1.3, 1.1, 1.7, 0.8, 0.9, 0.7],
+      "Table 3. Model performance with terrain-matched absences (20 predictors, TPI excluded).")
+P("Gradient-boosted trees outperform the Random Forest used in the reference study, but LightGBM "
+  "and XGBoost are statistically indistinguishable from one another (paired bootstrap ΔAUC "
+  "+0.0003, 95% CI −0.0013 to +0.0018). Reporting a single best model is not supportable at this "
+  "sample size, and by extension neither are the four-way model rankings published on inventories "
+  "of around one hundred points.")
+figure("fig_model_ci", "Figure 3. Model ranking with bootstrap confidence intervals.", 5.4)
+
+H("4.4 Coarse predictors encode geography, not snowpack", 2)
+rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
+        for _, r in ga.iterrows()]
+table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
+      "Table 4. Replacing coarse predictors with raw spatial coordinates.")
+full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
+repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
+P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
+  f"coordinates changes performance from {full:.3f} to {repl:.3f}, a difference well within the "
+  "confidence intervals. These predictors contribute to the model, but their contribution is "
+  "positional rather than physical: at their native resolution they are smooth regional trend "
+  "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
+  "duration among the leading predictors may therefore be describing a geographic index rather "
+  "than snowpack process.")
+figure("fig_geography_ablation", "Figure 4. Coarse predictors are interchangeable with coordinates.", 6.4)
+
+H("4.5 Reported AUC depends on the background sampling ratio", 2)
+rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
+        for _, r in br.iterrows()]
+table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
+      [1.6, 1.0, 0.9, 0.9, 0.9],
+      "Table 5. Effect of the background sampling ratio.")
+P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
+  f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
+  f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
+  "than a property of the landscape, a headline AUC can be improved by a sampling decision while "
+  "the model becomes less useful for the operational task. Precision-recall metrics should be "
+  "reported alongside AUC.")
+
+H("4.6 Spatial transferability", 2)
+rows = [[r.transfer.replace("north", "Chandra-Bhaga").replace("south", "Upper Beas"),
+         f"{int(r.n_train):,}", f"{int(r.n_test):,}",
+         f"{r.roc_auc:.3f} [{r.ci_low:.3f}, {r.ci_high:.3f}]"] for _, r in tr.iterrows()]
+table(["Transfer", "n train", "n test", "AUC (95% CI)"], rows, [2.2, 1.0, 1.0, 1.7],
+      "Table 6. Training on one sub-basin and testing on the other.")
+P(f"Transfer performance is symmetric and approximately 0.05 below within-region performance, "
+  "indicating that the model generalises to terrain it has not seen rather than memorising local "
+  "configurations.")
+figure("fig_transfer_shap",
+       "Figure 5. Sub-basin transferability (left) and SHAP predictor importance (right).", 6.6)
+
+H("4.7 Calibration", 2)
+P("Predicted scores are informative but not calibrated probabilities: the Brier score is 0.1034, "
+  "isotonic regression recovers only 3.5% of it, and the maximum deviation between predicted and "
+  "observed frequency across quantile bins is 0.099, with under-prediction at low scores and "
+  "over-prediction at high scores. Because presence-background models are fitted at an arbitrary "
+  "prevalence, susceptibility values should be interpreted as a relative index, not as "
+  "P(avalanche) — a distinction lost when raw scores are binned by natural breaks and presented as "
+  "hazard classes.")
+
+H("4.8 Illustrative application: susceptibility map", 2)
+P("The map below applies XGBoost with terrain-matched sampling, restricted to potential release "
+  "areas (slope 28–60°), covering 11,699 km². It is included to show what the corrected procedure "
+  "produces and to make the domain question concrete; it is NOT offered as an operational "
+  "susceptibility product. Section 4.2 measures the precision of the inventory it is trained on, "
+  "and at that precision the map should be read as a demonstration of method rather than as a "
+  "statement about where avalanches occur.")
+P("Restricting the domain matters for comparability: classifying valley floors and lake surfaces as "
+  "low susceptibility inflates the denominator, so the commonly quoted statistic 'x% of the basin "
+  "is highly susceptible' cannot be compared between studies unless each states its domain. The "
+  "published study reports ~8% of the region as highly susceptible over the whole basin; the "
+  "figures below are percentages of potential release area, which is the stricter denominator.")
 table(["Class", "Area (km²)", "% of release area"],
       [["Very low", "6,125", "52.4"], ["Low", "2,167", "18.5"], ["Moderate", "1,314", "11.2"],
        ["High", "1,017", "8.7"], ["Very high", "1,077", "9.2"]],
@@ -393,10 +418,19 @@ H("5. Discussion", 1)
 
 H("5.1 Implications for the literature", 2)
 P("The decomposition indicates that high AUC values in IHR avalanche susceptibility studies are "
-  "primarily a property of how non-avalanche points are drawn. Because the same absence rule "
-  "recurs across this literature, the finding is not specific to any one study. It also implies "
-  "that spatial cross-validation, while methodologically correct, addresses the smaller of the two "
-  "problems: in our data it accounts for essentially none of the optimism once sampling is fixed.")
+  "primarily a property of how non-avalanche points are drawn. Because the same absence rule recurs "
+  "across this literature, the finding is not specific to any one study, and it is not a claim that "
+  "any published model is incorrectly implemented. A classifier trained against flat, vegetated, "
+  "urban and cropland absences does what it was asked to do; the difficulty is that the question it "
+  "answers — can steep snow-covered terrain be told apart from flat green valley floor — is not the "
+  "question a susceptibility map is read as answering. The same applies to our own models, which is "
+  "why Section 4.1 reports what the conventional protocol yields on our data rather than only what "
+  "our preferred protocol yields.")
+P("The practical recommendation is therefore not that published maps be discarded, but that "
+  "absence selection be reported and justified as carefully as model choice currently is, and that "
+  "a terrain-matched comparison be given alongside any headline figure. Spatial cross-validation, "
+  "while methodologically correct, addresses the smaller of the two problems: in our data it "
+  "accounts for essentially none of the optimism once sampling is fixed.")
 
 H("5.2 An artefact in our own pipeline", 2)
 P("SHAP attributed the largest single contribution to the topographic position index, at "
@@ -449,6 +483,12 @@ bullets([
     f"Spatial-block cross-validation changes performance by {a_xgb - b_xgb:+.3f} under that "
     "sampling design. The field's principal methodological correction addresses the smaller "
     "problem.",
+    f"Blind optical verification puts the precision of the Sentinel-1 detections at "
+    f"{100*pv.precision.iloc[0]:.1f}% unfiltered and {100*pv.precision.iloc[1]:.1f}% once snow cover "
+    "is required to persist after each event, the first such measurement we are aware of for an "
+    "avalanche inventory in this region. Published inventories here carry no precision estimate, so "
+    "the proportion of training labels that are genuine avalanches is unknown in every study we "
+    "reproduce, including in the sense that it may be considerably higher than ours.",
     "Coarse climate and snow-cover predictors are statistically interchangeable with raw spatial "
     "coordinates and should not be interpreted as snowpack process.",
     "Reported AUC can be increased by raising the background sampling ratio while precision-recall "
