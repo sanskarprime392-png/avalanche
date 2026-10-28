@@ -342,3 +342,28 @@ def fig_adjusted_skill():
                      fontweight="bold")
     fig.tight_layout()
     savefig(fig, "fig_adjusted_skill", outdir=FIGS)
+
+
+def fig_headroom():
+    """How much of a model's true skill a reported AUC can still express, against displacement."""
+    r = pd.read_csv(os.path.join(RES, "correction_threshold.csv"))
+    g = r.groupby("delta").agg(headroom=("headroom", "mean"),
+                               rec=("adjusted", "mean"), ref=("reference", "mean")).reset_index()
+    g["frac"] = g.rec / g.ref
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
+    ax.plot(g.delta, g.headroom, "o-", color=CB_PALETTE[0], lw=1.8, ms=5,
+            label="headroom left for skill  (1 − null baseline)")
+    ax.plot(g.delta, g.frac, "s-", color=CB_PALETTE[2], lw=1.8, ms=5,
+            label="fraction of true skill recovered")
+    ax.axhline(0, color="0.6", lw=0.8)
+    for dd, lab in ((1.07, "this study"), (2.15, "terrain-matched")):
+        ax.axvline(dd, color="0.4", lw=0.9, ls="--", alpha=0.8)
+        ax.text(dd + 0.05, 0.92, lab, rotation=90, fontsize=7.5, va="top", color="0.3")
+    ax.set_xlabel("Absence displacement δ (standard deviations)")
+    ax.set_ylabel("Proportion")
+    ax.set_ylim(-0.03, 1.02)
+    ax.legend(fontsize=8.5)
+    ax.set_title("Beyond δ ≈ 1 a reported AUC has too little range left to express skill,\n"
+                 "and no post-hoc adjustment recovers it", fontsize=9.5)
+    fig.tight_layout()
+    savefig(fig, "fig_headroom", outdir=FIGS)
