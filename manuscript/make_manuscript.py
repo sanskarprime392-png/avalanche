@@ -245,8 +245,10 @@ bullets([
 ])
 P("Deposits are traced upslope to the highest pixel on release-angle terrain (30–50°) within a "
   "600 m search radius, because susceptibility models predict release, not runout. This yields "
-  "6,364 candidate release points, of which 3,188 are flagged in four or more winters — the "
-  "threshold used for the analyses below. Section 4.7 reports what fraction of these are real. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
+  "6,364 candidate release points, of which 3,188 are flagged in four or more winters. Nine of "
+  "those fall on cells where at least one predictor is undefined and are dropped, so 3,179 enter "
+  "the analyses below; both figures are given wherever the inventory is described, since the "
+  "difference is otherwise easy to mistake for an inconsistency. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
   "not confined to road-accessible slopes.")
 
 H("3.2 Predictive factors", 2)
@@ -257,7 +259,22 @@ P("Twenty predictors were assembled on a common 30 m UTM 43N grid: twelve topogr
   "Distance to faults is computed from vector geometry, because every active fault lies outside "
   "the study area and a rasterised distance transform is therefore undefined within it.")
 
-H("3.3 Sampling design", 2)
+H("3.3 Slope windows used at each stage", 2)
+P("Four slope windows appear in the workflow and they are deliberately different, because they "
+  "answer different questions. Detection retains change on 25–60° slopes, a deliberately broad "
+  "window chosen to avoid discarding events near the margins. Release points are traced into "
+  "30–50° terrain, the slab-release window conventional in the avalanche literature. Background "
+  "points are drawn from 25–55°, matching the detection window at its lower bound while excluding "
+  "the steepest faces, which hold little snow and are not comparable terrain. The susceptibility "
+  "map is masked to 28–60°, the potential-release-area definition of Bühler et al. (2018), so that "
+  "areal statistics are comparable with other studies using that convention.")
+P("Because the background window directly sets the separability of the absence design, the "
+  "headline result was recomputed across four alternatives. Reported AUC varies with the choice — "
+  "0.844 at 20–60°, 0.866 at 25–55°, 0.873 at 28–60° and 0.875 at 30–50° — while design-adjusted "
+  "skill stays between +0.099 and +0.110. The design choice moves the reported number by 0.031 and "
+  "the adjusted quantity by 0.011, which is the behaviour the adjustment is intended to produce.")
+
+H("3.4 Sampling design", 2)
 P("Two absence schemes are compared. The PAPER-STYLE scheme reproduces published practice: points "
   "drawn at random from low-slope terrain classified as tree cover, grassland, cropland, built-up "
   "or water. The TERRAIN-MATCHED scheme draws background points from avalanche-capable slopes "
@@ -271,7 +288,7 @@ P("Aspect matching is required, not optional. Sentinel-1 is right-looking, so a 
   "consistent across both geometries. Matching background to the presence aspect distribution "
   "prevents the classifier from scoring on this artefact.", )
 
-H("3.4 Validation and models", 2)
+H("3.5 Validation and models", 2)
 P("Models are evaluated under random k-fold cross-validation, as in published work, and under "
   "spatial-block cross-validation with 10 km blocks (246 blocks). Five classifiers are compared: "
   "Random Forest, Support Vector Machine and Logistic Regression, as used in the reference "
@@ -346,6 +363,13 @@ figure("fig_adjusted_skill",
        "sampling design (b). The ranking inverts.")
 
 H("4.3 What each correction costs", 2)
+P("Two configurations recur below and must not be confused. CONFIGURATION C2 applies the melt-out "
+  "filter and centroid-derived release points to the single-scale predictor set, and reaches AUC "
+  "0.841. CONFIGURATION C3 adds the multi-scale terrain predictors of Section 4.7 to C2 and reaches "
+  "0.866. The correction ladder in Table 5 ends at C2, because its purpose is to isolate the cost "
+  "of each correction with the predictor set held fixed; the design-adjusted figures in Section 4.2 "
+  "use C3, the best-performing honest configuration. Both are reported throughout rather than "
+  "silently interchanged.")
 P("Five corrections separate the published protocol from a defensible estimate. Applying them "
   "cumulatively to the same models and the same study area shows how much of the reported figure "
   "each one accounts for.")

@@ -151,3 +151,89 @@ def robustness(deltas=(0, 1, 2, 3, 4, 6), n_rep=5):
         got = [r["auc"] for r in rows if r["setting"] == label]
         print(f"  {label:<34} " + "  ".join(f"{v:.3f}" for v in got), flush=True)
     return pd.DataFrame(rows)
+
+
+def _make(delta, n, d, seed, skill, structure, rng=None):
+    """Synthetic study with a controllable amount of TRUE skill and a chosen data structure."""
+    rng = rng or np.random.default_rng(seed)
+    Xp = rng.normal(0, 1, size=(n, d))
+    Xa = rng.normal(0, 1, size=(n, d))
+    # `skill` sets how far apart the classes are on the informative axis, i.e. how learnable the
+    # problem genuinely is, independently of where the absences are placed
+    Xp[:, 0] = rng.normal(+skill, 0.8, size=n)
+    Xa[:, 0] = rng.normal(-skill, 0.8, size=n)
+
+    if structure == "correlated":
+        A = rng.normal(0, 1, size=(d, d)) * 0.35 + np.eye(d)
+        Xp, Xa = Xp @ A, Xa @ A
+    elif structure == "nonlinear":
+        # the true boundary is a ring rather than a hyperplane
+        Xp[:, 0] = np.abs(Xp[:, 0]) + skill
+        Xa[:, 0] = np.abs(Xa[:, 0])
+    elif structure == "clustered":
+        # presences arrive in spatial clumps, as real inventories do
+        k = max(n // 50, 2)
+        cent = rng.normal(0, 1.5, size=(k, d))
+        Xp = cent[rng.integers(0, k, n)] + rng.normal(0, 0.4, size=(n, d))
+        Xp[:, 0] += skill
+    elif structure == "imbalanced":
+        Xa = np.repeat(Xa, 5, axis=0)[: n * 5]
+
+    Xa[:, 1] += delta
+    X = np.vstack([Xp, Xa])
+    y = np.r_[np.ones(len(Xp), int), np.zeros(len(Xa), int)]
+    return X, y
+
+
+def _auc(X, y, seed):
+    from sklearn.ensemble import RandomForestClassifier
+    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.3, random_state=seed, stratify=y)
+    m = RandomForestClassifier(n_estimators=300, n_jobs=-1, random_state=seed)
+    m.fit(Xtr, ytr)
+    return roc_auc_score(yte, m.predict_proba(Xte)[:, 1])
+
+
+def validate_correction(structures=("gaussian", "correlated", "nonlinear", "clustered",
+                                    "imbalanced", "label_noise"),
+                        skills=(0.0, 0.4, 0.8, 1.2), deltas=(0, 1, 2, 3, 4),
+                        n=1500, d=8, n_rep=4):
+    """Does design-adjusted skill recover the same value at every absence displacement?
+
+    The quantity the diagnostic should recover is the AUC the study would have reported had its
+    absences been drawn without displacement — the honest evaluation — expressed above chance.
+    Because true skill is held fixed while delta varies, a working diagnostic returns a constant.
+    Reporting where it stays constant and where it drifts is what establishes its range of validity.
+    """
+    import pandas as pd
+    rows = []
+    for structure in structures:
+        for skill in skills:
+            noise = structure == "label_noise"
+            st = "gaussian" if noise else structure
+            # reference: the honest evaluation, absences undisplaced
+            ref = []
+            for s in range(n_rep):
+                X, y = _make(0.0, n, d, s, skill, st)
+                if noise:
+                    rng = np.random.default_rng(1000 + s)
+                    flip = rng.random(len(y)) < 0.20
+                    y = np.where(flip, 1 - y, y)
+                ref.append(_auc(X, y, s))
+            ref_skill = float(np.mean(ref)) - 0.5
+            for delta in deltas:
+                obs, adj = [], []
+                for s in range(n_rep):
+                    X, y = _make(delta, n, d, s, skill, st)
+                    if noise:
+                        rng = np.random.default_rng(1000 + s)
+                        flip = rng.random(len(y)) < 0.20
+                        y = np.where(flip, 1 - y, y)
+                    a = _auc(X, y, s)
+                    obs.append(a)
+                base = null_baseline(delta, n_rep=4, n=n, d=d)
+                adj = float(np.mean(obs)) - base
+                rows.append(dict(structure=structure, true_skill=skill, delta=delta,
+                                 reference=ref_skill, observed_auc=float(np.mean(obs)),
+                                 baseline=base, adjusted=adj, error=adj - ref_skill))
+        print(f"  {structure} done", flush=True)
+    return pd.DataFrame(rows)
