@@ -237,3 +237,43 @@ def validate_correction(structures=("gaussian", "correlated", "nonlinear", "clus
                                  baseline=base, adjusted=adj, error=adj - ref_skill))
         print(f"  {structure} done", flush=True)
     return pd.DataFrame(rows)
+
+
+def structured_noise_test(deltas=(0, 1, 2, 3, 4, 6), rates=(0.0, 0.2, 0.5, 0.8),
+                          n=1500, d=8, n_rep=4):
+    """Does label error that is STRUCTURED in predictor space overturn the inflation result?
+
+    Verification showed our own false positives are not scattered: they sit about 900 m lower than
+    the verified events, and the background is elevation-matched, so the error is correlated with a
+    variable the sampling design acts on. The referee's objection is that identical labels need not
+    affect every design equally under such structure.
+
+    Here a fraction `rate` of presences are replaced by points drawn from the low end of the
+    informative axis — the synthetic analogue of melt-out false positives at low elevation — and the
+    null curve is recomputed. If the relationship between displacement and reported AUC survives, the
+    inflation result does not depend on labels being clean.
+    """
+    import pandas as pd
+    rng = np.random.default_rng(7)
+    rows = []
+    for rate in rates:
+        for delta in deltas:
+            aucs = []
+            for s in range(n_rep):
+                r = np.random.default_rng(s)
+                Xp = r.normal(0, 1, size=(n, d))
+                Xp[:, 0] = r.normal(1.2, 0.8, size=n)
+                k = int(rate * n)
+                if k:
+                    # contaminating presences drawn from the LOW end of the informative axis
+                    Xp[:k, 0] = r.normal(-1.0, 0.8, size=k)
+                Xa = r.normal(0, 1, size=(n, d))
+                Xa[:, 0] = r.normal(-1.2, 0.8, size=n)
+                Xa[:, 1] += delta
+                X = np.vstack([Xp, Xa])
+                y = np.r_[np.ones(n, int), np.zeros(n, int)]
+                aucs.append(_fit_auc(X, y, s))
+            rows.append(dict(noise_rate=rate, delta=delta, auc=float(np.mean(aucs))))
+        got = [r["auc"] for r in rows if r["noise_rate"] == rate]
+        print(f"  contamination {rate:.0%}  " + "  ".join(f"{v:.3f}" for v in got), flush=True)
+    return pd.DataFrame(rows)

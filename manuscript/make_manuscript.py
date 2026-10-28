@@ -2,6 +2,7 @@
 """Assemble the manuscript from the actual result files — no placeholder numbers."""
 import os
 
+import numpy as np
 import pandas as pd
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -32,6 +33,9 @@ sc = pd.read_csv(os.path.join(RES, "simulation_curve.csv"))
 das = pd.read_csv(os.path.join(RES, "design_adjusted_skill.csv"))
 rb = pd.read_csv(os.path.join(RES, "simulation_robustness.csv"))
 th = pd.read_csv(os.path.join(RES, "correction_threshold.csv"))
+cv = pd.read_csv(os.path.join(RES, "correction_validation.csv"))
+sn = pd.read_csv(os.path.join(RES, "structured_noise.csv"))
+les = pd.read_csv(os.path.join(RES, "label_error_structure.csv"))
 
 doc = Document()
 doc.styles["Normal"].font.name = "Calibri"
@@ -359,6 +363,21 @@ P("At δ = 0 the subtraction recovers the known skill almost exactly. At δ = 1 
   "available to express skill is 1 − B, where B is the null baseline. At δ = 3 that headroom is "
   "0.020 — the scale is saturated, and the information is destroyed rather than displaced. No "
   "post-hoc arithmetic recovers it.")
+P("The failure is not peculiar to Gaussian predictors. Repeating the test with correlated "
+  "predictors, a nonlinear decision boundary, spatially clustered presences and 20% label noise "
+  "gives the same behaviour in every case: exact at δ = 0 and degrading from δ = 1 onward. "
+  "Clustering is the least forgiving, which matters because real inventories are clustered. The "
+  "error also grows with the amount of true skill present, since a model with more to express "
+  "loses more when the scale runs out of room.")
+piv = cv.pivot_table(index="structure", columns="delta", values="error",
+                     aggfunc=lambda v: float(np.mean(np.abs(v))))
+nice = {"gaussian": "Gaussian predictors", "correlated": "Correlated predictors",
+        "nonlinear": "Nonlinear boundary", "clustered": "Clustered presences",
+        "label_noise": "20% label noise"}
+rows = [[nice.get(i, i)] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
+table(["Data structure"] + [f"δ={c:g}" for c in piv.columns], rows,
+      [2.1] + [0.75] * len(piv.columns),
+      "Table 4. Mean absolute error of the subtraction, by data structure and displacement.")
 figure("fig_headroom",
        "Figure 3. Headroom remaining on the AUC scale, and the fraction of known true skill that "
        "subtraction recovers, against absence displacement.")
@@ -373,7 +392,7 @@ rows = [[r.configuration, f"{r.delta:.2f}", f"{r.reported_auc:.3f}", f"{r.null_b
         for _, r in das.iterrows()]
 table(["Configuration", "δ", "Reported AUC", "Baseline", "Headroom", "Above baseline"], rows,
       [2.2, 0.6, 1.0, 0.9, 0.9, 1.1],
-      "Table 4. Absence separability, null baseline and remaining headroom for each configuration.")
+      "Table 5. Absence separability, null baseline and remaining headroom for each configuration.")
 P("The published protocol places its absences 7.06 standard deviations from its presences, leaving "
   "headroom of 0.000. Its reported value is therefore uninterpretable as evidence of skill: a model "
   "with no knowledge of avalanches scores the same. This is a statement about what the evaluation "
@@ -382,7 +401,36 @@ P("The published protocol places its absences 7.06 standard deviations from its 
   "headroom of 0.242 and exceeds its baseline by 0.108, which Table 4 indicates is a conservative "
   "floor rather than an estimate, since at δ ≈ 1 subtraction recovers roughly half of true skill.")
 
-H("4.3 What each correction costs", 2)
+H("4.3 Whether label error can account for the result", 2)
+P("Every configuration compared here uses identical labels, which controls for label quality only "
+  "if the errors are distributed like the true events in predictor space. Checking our own, they "
+  "are not: detections rejected on review sit 908 m lower than verified ones (3,186 m against "
+  "4,094 m, Mann-Whitney p = 0.038), which is what melt-out contamination should look like, since "
+  "ablation begins at lower elevations. Slope and aspect differences are not significant, though "
+  "with three verified events those tests have little power. Because background points are matched "
+  "on elevation, this error structure is correlated with a variable the sampling design acts on, "
+  "and the assumption that labels affect all designs equally cannot simply be asserted.")
+P("We therefore tested it. A fraction of synthetic presences was replaced by points drawn from the "
+  "low end of the informative axis — the analogue of melt-out false positives at low elevation — "
+  "and the displacement curve recomputed.")
+piv = sn.pivot(index="noise_rate", columns="delta", values="auc")
+rows = [[f"{int(100*i)}%"] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
+table(["Contaminated presences"] + [f"δ={c:g}" for c in piv.columns], rows,
+      [1.9] + [0.63] * len(piv.columns),
+      "Table 6. Reported AUC under structured label contamination.")
+P("At δ = 0 contamination matters a great deal: reported AUC falls from 0.979 to 0.629 as the "
+  "contaminated fraction rises to 80%. By δ = 3 the spread across contamination rates is 0.019, and "
+  "by δ = 6 it is 0.001. At the separability of the published protocol an inventory that is 80% "
+  "false positives reports the same value as a clean one — the displacement overwhelms the label "
+  "quality entirely. Structured label error therefore cannot account for the inflation result; if "
+  "anything it sharpens it, since at high separability the reported score ceases to respond to "
+  "label quality at all.")
+P("The corollary constrains our own empirical figures. The corrected configuration sits at δ ≈ 1, "
+  "where contamination still moves reported AUC by up to 0.187. Its value of 0.866 is therefore "
+  "sensitive to inventory precision in a way the published protocol's 1.000 is not, and should be "
+  "read with that in mind.")
+
+H("4.4 What each correction costs", 2)
 P("Two configurations recur below and must not be confused. CONFIGURATION C2 applies the melt-out "
   "filter and centroid-derived release points to the single-scale predictor set, and reaches AUC "
   "0.841. CONFIGURATION C3 adds the multi-scale terrain predictors of Section 4.7 to C2 and reaches "
@@ -396,7 +444,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 5. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 7. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -409,7 +457,7 @@ figure("fig_correction_ladder",
        "Figure 4. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
-H("4.4 Where reported performance comes from", 2)
+H("4.5 Where reported performance comes from", 2)
 rows = []
 lab = {"A": ("paper-style", "random"), "B": ("paper-style", "spatial-block"),
        "C": ("terrain-matched", "random"), "D": ("terrain-matched", "spatial-block")}
@@ -419,7 +467,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 6. Controlled decomposition of reported performance.")
+      "Table 8. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -443,15 +491,15 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 7. Sensitivity of the decomposition to inventory confidence.")
+      "Table 9. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
        "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
 
-H("4.5 Coarse predictors encode geography, not snowpack", 2)
+H("4.6 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 8. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 10. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -463,12 +511,12 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "than snowpack process.")
 figure("fig_geography_ablation", "Figure 7. Coarse predictors are interchangeable with coordinates.", 6.4)
 
-H("4.6 Reported AUC depends on the background sampling ratio", 2)
+H("4.7 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 9. Effect of the background sampling ratio.")
+      "Table 11. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -476,13 +524,13 @@ P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc
   "the model becomes less useful for the operational task. Precision-recall metrics should be "
   "reported alongside AUC.")
 
-H("4.7 What improves a corrected model, and what does not", 2)
+H("4.8 What improves a corrected model, and what does not", 2)
 P("Having removed the sources of inflation, we asked what genuinely raises performance. Four "
   "interventions were tried on the corrected inventory and evaluated identically.")
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 10. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 12. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
