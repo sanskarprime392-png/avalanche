@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+title: >-
+  Reported accuracy in geohazard susceptibility mapping is a function of the
+  absence sampling design
+message: >-
+  If you use this software or build on these results, please cite the work
+  using the metadata below.
+type: software
+authors:
+  - given-names: Sanskar
+    family-names: Gupta
+    email: Sanskar.in127@gmail.com
+    affiliation: >-
+      School of Computer Science Engineering and Technology, Bennett
+      University, Greater Noida, India
+repository-code: 'https://github.com/sanskarprime392-png/avalanche'
+abstract: >-
+  Susceptibility maps for geohazards are built from presence-only data, so the
+  absence class is constructed by the analyst. This work shows in simulation
+  that a model with no predictive skill reports an area under the ROC curve of
+  0.739 at one standard deviation of absence displacement and 1.000 at six,
+  and demonstrates by construction that the absolute skill of a presence-only
+  model is not identifiable from the data it was fitted to. What remains
+  identifiable is the relative effect of the absence design, measured by
+  holding presences, predictors and model fixed and varying only the sampling.
+  An independent Sentinel-1 avalanche inventory for the Chandra-Bhaga and
+  Upper Beas basins of the Western Himalaya provides the empirical test.
+keywords:
+  - susceptibility mapping
+  - pseudo-absence selection
+  - sampling bias
+  - model evaluation
+  - presence-only data
+  - snow avalanches
+  - Sentinel-1
+license: MIT
