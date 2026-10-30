@@ -90,7 +90,7 @@ P("The construction displaces absences along a single axis carrying no informati
   "terrain does — changes null-arm AUC by at most 0.016 at any displacement. The inflation is a "
   "function of distance, not of direction.")
 dt = pd.read_csv(os.path.join(RES, "direction_test.csv"))
-nul = dt[dt.arm == "null"] if "arm" in dt.columns else dt
+nul = dt[dt.arm == "no skill"] if "arm" in dt.columns else dt
 piv = nul.pivot(index="direction", columns="delta", values="auc")
 table(["Displacement direction"] + [f"δ={c:g}" for c in piv.columns],
       [[i] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index],
@@ -121,10 +121,14 @@ table(["δ (SD)", "Room left on the AUC scale", "Mean |error|", "True skill reco
        for d, row in g.iterrows()],
       [0.9, 2.0, 1.2, 1.6],
       "Table S4. Recovery of known true skill by subtraction, against absence displacement.")
-P("The decay tracks the room remaining on the AUC scale, which is bounded above by unity. At "
-  "δ = 3 that room is 0.020 and the subtraction recovers 3% of the known skill: the information is "
-  "destroyed rather than displaced, which is why no post-hoc arithmetic recovers it and why "
-  "Section 4.2 reports an identifiability limit instead of a correction.")
+P("The phrase reported as true skill recovered is the ratio of two quantities, both in AUC units: the "
+  "numerator is the reported AUC at that displacement minus the null-model AUC at the same "
+  "displacement, and the denominator is the reference skill, defined as the AUC obtained with "
+  "absences drawn without displacement, minus 0.5. A working correction would return 100% at every "
+  "displacement, because true skill is held constant by construction. The decay instead tracks the "
+  "room remaining on the AUC scale, which is bounded above by unity: at δ = 3 that room is 0.020 "
+  "and the subtraction recovers 4% of the known skill. The information is destroyed rather than "
+  "displaced, which is why Section 4.2 reports an identifiability limit instead of a correction.")
 
 H("S4  Sensitivity to the background slope window", 1)
 P("The background slope window sets the separability of the absence design directly. Across four "
@@ -145,8 +149,10 @@ P("designcheck.py in the repository runs the design comparison on any presence-o
   "locations and a pool of candidate absence locations, it scores one model against several "
   "absence designs and reports the spread. Run on this study's own data with a pool spanning valley "
   "floor to avalanche-capable terrain, drawing absences at random from the pool — the common "
-  "default — returns AUC 0.954 at a separability of 3.06, while matching on slope, elevation and "
-  "aspect returns 0.930 at 2.15. The spread of 0.031 is produced entirely by the sampling.")
+  "default — returns AUC 0.954 at a separability of 3.06, while the three matched designs return "
+  "0.923 to 0.930 at separabilities of 2.09 to 2.15. The spread across all four designs is 0.031, "
+  "and 0.024 between the random default and the most thoroughly matched design. Either figure is "
+  "produced entirely by the sampling, with presences, predictors and model unchanged.")
 
 doc.save(OUT)
 print("wrote", OUT)

@@ -12,7 +12,7 @@ from docx.shared import Inches, Pt, RGBColor
 DATA = r"C:\Users\Sanskar\Documents\avalanche_data"
 RES = os.path.join(DATA, "results")
 FIGS = os.path.join(DATA, "figures")
-OUT = r"C:\Users\Sanskar\Documents\avalanche\Avalanche_Manuscript.docx"
+OUT = os.environ.get("MS_OUT", "C:/Users/Sanskar/Documents/avalanche/Avalanche_Manuscript.docx")
 NAVY = RGBColor(0x0B, 0x3D, 0x5C)
 NICE = {"lgbm": "LightGBM", "xgb": "XGBoost", "rf": "Random Forest",
         "svm_rbf": "SVM (RBF)", "logreg": "Logistic Regression"}
@@ -399,9 +399,18 @@ P("Attempts to construct a null baseline from a study's own data fail for the sa
   f"published protocol the diagonal form gives {en.delta_diag.iloc[0]:.2f} standard deviations and "
   f"the Mahalanobis form {en.delta_maha.iloc[0]:.2f}, so a baseline read off a δ axis inherits the "
   "choice of measure.")
-P("We therefore withdraw any proposal to correct a reported AUC, and state the limit instead: the "
-  "absolute skill of a presence-only susceptibility model is not identifiable from the data it was "
-  "fitted to. What remains identifiable is the RELATIVE effect of the absence design, obtained by "
+P("Two failed constructions do not establish that every conceivable null must fail, and we do not "
+  "claim a general impossibility theorem. What the two-world construction establishes is sharper "
+  "and sufficient: under the observational setup a presence-only study actually has — the presence "
+  "sample, the absence sample, and the predictors — two models whose true skill differs by 0.281 "
+  "can produce data a study could not tell apart. Any correction must therefore import information "
+  "from outside that setup, such as verified true absences or a second independently designed "
+  "absence set. Stating the null hypothesis precisely matters here: we test the hypothesis that "
+  "predictors carry no information about occurrence beyond what the sampling design induces, which "
+  "is not the same as testing for no association after conditioning on spatial structure.")
+P("We therefore withdraw our proposal to correct a reported AUC, and state the limit instead: the "
+  "absolute skill of a presence-only susceptibility model is not recoverable from the data it was "
+  "fitted to alone. What remains identifiable is the RELATIVE effect of the absence design, obtained by "
   "holding the presences, the predictors and the model fixed and varying only how absences are "
   "drawn. That comparison is the subject of the remaining sections, and it is available to any "
   "study at the cost of running its own pipeline a second time.")
@@ -466,10 +475,10 @@ H("4.5 What each correction costs", 2)
 P("Two configurations recur below and must not be confused. CONFIGURATION C2 applies the melt-out "
   "filter and centroid-derived release points to the single-scale predictor set, and reaches AUC "
   "0.841. CONFIGURATION C3 adds the multi-scale terrain predictors of Section 4.7 to C2 and reaches "
-  "0.866. The correction ladder in Table 5 ends at C2, because its purpose is to isolate the cost "
-  "of each correction with the predictor set held fixed; the design-adjusted figures in Section 4.2 "
-  "use C3, the best-performing honest configuration. Both are reported throughout rather than "
-  "silently interchanged.")
+  "0.866. The correction ladder ends at C2, because its purpose is to isolate the cost of each "
+  "correction with the predictor set held fixed; C3 is the best-performing honest configuration "
+  "and is the one quoted wherever a single current figure is needed. Both are reported throughout "
+  "rather than silently interchanged.")
 P("Five corrections separate the published protocol from a defensible estimate. Applying them "
   "cumulatively to the same models and the same study area shows how much of the reported figure "
   "each one accounts for.")
@@ -584,33 +593,41 @@ H("5.1 What a reported AUC can and cannot tell a reader", 2)
 P("Susceptibility data are presence-only: the locations of past events are observed, and the "
   "absences are constructed by the analyst. Section 4.1 shows that this construction, not the "
   "model, sets most of the reported score — a model with no skill at all reaches 0.910 at two "
-  "standard deviations of absence displacement and 1.000 at six. Two consequences follow, and "
-  "neither is specific to avalanches.")
+  "standard deviations of absence displacement and 1.000 at six. Section 4.2 shows that the "
+  "contribution cannot be removed after the fact. Three consequences follow, and none is specific "
+  "to avalanches.")
 P("First, AUC is not comparable between studies that drew their absences differently. A study "
   "reporting 0.97 with absences taken from flat farmland has not demonstrated more skill than one "
-  "reporting 0.85 with absences on comparable terrain; on the evidence here it has probably "
-  "demonstrated less. Model comparisons, predictor rankings and claims of improvement over prior "
-  "work all inherit this, because all of them rest on a quantity that the sampling design has "
-  "already largely determined.")
+  "reporting 0.85 with absences on comparable terrain. Model comparisons, predictor rankings and "
+  "claims of improvement over prior work all inherit this, because all rest on a quantity the "
+  "sampling design has already largely determined.")
 P("Second, above roughly three standard deviations of separation the measure saturates and stops "
-  "discriminating at all: in the simulation a model with genuine skill and a model with none both "
-  "report values above 0.97. Much of the published literature appears to operate in that regime. "
-  "The practical recommendation is not that existing maps be discarded — a map can be useful "
-  "without its headline statistic being meaningful — but that absence selection be reported and "
-  "justified as carefully as model selection currently is, and that the two quantities introduced "
-  "here be reported alongside AUC.")
+  "discriminating: in the simulation a model with genuine skill and a model with none both report "
+  "values above 0.97. Much of the published literature appears to operate in that regime.")
+P("Third — and this is the limit that bites — the part of a reported AUC attributable to the model "
+  "cannot be recovered by arithmetic. A difference between the presence and absence samples enters "
+  "the statistic identically whether it arises from genuine terrain differences or from where the "
+  "absences were drawn, and the samples are all the evidence there is. Any correction, including "
+  "the one we attempted, requires assumptions that the data cannot supply.")
 
-H("5.2 A correction that studies can apply to themselves", 2)
-P("Both quantities are cheap to compute. The separability δ is a standardised distance between the "
-  "presence and absence clouds in predictor space and requires only the study's own training "
-  "table. The null baseline is a simulation at that δ, which takes seconds. Their difference — the "
-  "skill a model contributes above what its sampling design already delivers — is the number a "
-  "reader assumes AUC reports. Code for both is released with this paper.")
-P("The correction is deliberately conservative. It does not claim to recover a model's true "
-  "accuracy, only to remove a component of the reported score that is attributable to the "
-  "experimental design rather than to the model. Where a design is so separable that a null model "
-  "already scores 1.000, the correction returns zero and the honest conclusion is that the study "
-  "has not measured predictive skill at all.")
+H("5.2 A design-sensitivity diagnostic rather than an AUC correction", 2)
+P("What a study can do instead is measure how much its own reported figure depends on a choice it "
+  "made. Holding the presences, the predictors, the model and the evaluation protocol fixed, and "
+  "varying only how absences are drawn, isolates the contribution of the sampling design. The "
+  "result is not a corrected accuracy and should not be reported as one: it is a sensitivity, "
+  "analogous to reporting how a result moves under a plausible alternative specification.")
+P("Concretely, we suggest four things. Report the absence rule explicitly, in enough detail that "
+  "it could be reimplemented. Run the same pipeline under at least two defensible absence designs "
+  "and report the range of AUC obtained. Where an independent evaluation set can be constructed "
+  "whose absences are drawn like the presences, report performance against it, since that figure "
+  "is interpretable in a way the in-sample one is not. And treat a large spread across designs as "
+  "what it is — evidence that the headline number describes the experiment rather than the model.")
+P("On the data used here that spread is 0.031 across four absence designs, from 0.923 with "
+  "absences matched on slope to 0.954 with absences drawn at random from the candidate pool, which "
+  "is the common default. That range is wider than the differences typically reported between "
+  "competing models in this literature. The comparison requires no new statistic and no simulation; "
+  "it is one extra run of a pipeline a study has already built, and designcheck.py in the "
+  "repository performs it on any presence-only dataset.")
 
 H("5.3 Applying the same standard to our own analysis", 2)
 P("Two artefacts of our own are reported because the argument demands it. SHAP attributed the "
@@ -631,11 +648,12 @@ P("The second concerns the optical verification used to establish label quality 
 
 H("5.4 Limitations", 2)
 bullets([
-    "The simulation establishes that absence displacement inflates AUC and provides a baseline at "
-    "a given separability. It does not model every way a real absence design can differ from the "
-    "presences — spatial clustering, differing covariance structure and non-Gaussian predictor "
-    "distributions are all simplified — so the baseline should be read as an approximation rather "
-    "than an exact correction.",
+    "The simulation establishes that absence displacement inflates AUC and characterises how the "
+    "inflation behaves. It is not a calibration: Section 4.2 withdraws the proposal to read a "
+    "baseline off it and subtract that from a real study's figure, and the simulated values should "
+    "not be used that way. The construction also simplifies real predictor structure — spatial "
+    "clustering, covariance and non-Gaussian marginals are all idealised — though the invariance "
+    "checks in the supplementary material show the qualitative behaviour survives each of these.",
     "The separability measure aggregates standardised differences across predictors and therefore "
     "depends on which predictors a study uses. Two studies with identical absence rules but "
     "different predictor sets will report different δ.",
@@ -658,9 +676,11 @@ bullets([
     "at six. Reported AUC is therefore a function of the sampling design.",
     "Above roughly three standard deviations the measure saturates: a model with genuine skill and "
     "one with none both report values above 0.97, so AUC no longer distinguishes them.",
-    "Measured on that scale, a published avalanche susceptibility protocol places its absences "
-    "7.06 standard deviations from its presences, where a null model is predicted to score 1.000. "
-    "Run on an independent inventory, the protocol returns 1.000.",
+    "A published avalanche susceptibility protocol places its absences 7.06 standard deviations "
+    "from its presences on the diagonal measure, in a regime where the SIMULATION returns 1.000 for "
+    "a model with no skill. Run on an independent inventory, the protocol OBSERVES 1.000. The "
+    "agreement is informative but the two figures are different kinds of quantity, and the "
+    "simulated one is not an estimate of the real model's skill.",
     "The absolute skill of a presence-only susceptibility model is not identifiable from the data "
     "it was fitted to. Two worlds with nearly indistinguishable observed samples differ by 0.281 in "
     "their ability to rank genuinely susceptible terrain, and no statistic computed from those "
