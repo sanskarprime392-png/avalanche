@@ -277,3 +277,48 @@ def structured_noise_test(deltas=(0, 1, 2, 3, 4, 6), rates=(0.0, 0.2, 0.5, 0.8),
         got = [r["auc"] for r in rows if r["noise_rate"] == rate]
         print(f"  contamination {rate:.0%}  " + "  ".join(f"{v:.3f}" for v in got), flush=True)
     return pd.DataFrame(rows)
+
+
+def direction_test(deltas=(0, 1, 2, 3, 4, 6), n=1500, d=8, n_rep=4,
+                   informative=True):
+    """Is the inflation specific to displacing absences along ONE orthogonal axis?
+
+    The construction so far moves absences along a single axis chosen to carry no information about
+    the outcome. A reviewer may reasonably ask whether that direction is special. Here the same
+    displacement magnitude is distributed in four ways: along one axis, spread evenly over several
+    uninformative axes, along a random direction in the uninformative subspace, and - the hardest
+    case - partly along the informative axis itself, which is what a real absence rule that favours
+    gentle terrain actually does.
+    """
+    import pandas as pd
+    rows = []
+    modes = ("single axis", "spread over 5 axes", "random direction", "30% along informative axis")
+    for mode in modes:
+        for delta in deltas:
+            aucs = []
+            for s in range(n_rep):
+                r = np.random.default_rng(s)
+                Xp = r.normal(0, 1, size=(n, d))
+                Xa = r.normal(0, 1, size=(n, d))
+                if informative:
+                    Xp[:, 0] = r.normal(1.2, 0.8, size=n)
+                    Xa[:, 0] = r.normal(-1.2, 0.8, size=n)
+                if mode == "single axis":
+                    Xa[:, 1] += delta
+                elif mode == "spread over 5 axes":
+                    # same total displacement, divided across axes so each moves less
+                    Xa[:, 1:6] += delta / np.sqrt(5)
+                elif mode == "random direction":
+                    v = r.normal(size=d - 1)
+                    v /= np.linalg.norm(v)
+                    Xa[:, 1:] += delta * v
+                else:
+                    Xa[:, 0] += 0.3 * delta          # partly along the informative axis
+                    Xa[:, 1] += np.sqrt(max(delta ** 2 - (0.3 * delta) ** 2, 0))
+                X = np.vstack([Xp, Xa])
+                y = np.r_[np.ones(n, int), np.zeros(n, int)]
+                aucs.append(_fit_auc(X, y, s))
+            rows.append(dict(direction=mode, delta=delta, auc=float(np.mean(aucs))))
+        got = [r["auc"] for r in rows if r["direction"] == mode]
+        print(f"  {mode:<28} " + "  ".join(f"{v:.3f}" for v in got), flush=True)
+    return pd.DataFrame(rows)

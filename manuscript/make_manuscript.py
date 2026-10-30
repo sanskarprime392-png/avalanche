@@ -35,6 +35,7 @@ rb = pd.read_csv(os.path.join(RES, "simulation_robustness.csv"))
 th = pd.read_csv(os.path.join(RES, "correction_threshold.csv"))
 cv = pd.read_csv(os.path.join(RES, "correction_validation.csv"))
 sn = pd.read_csv(os.path.join(RES, "structured_noise.csv"))
+dt = pd.read_csv(os.path.join(RES, "direction_test.csv"))
 les = pd.read_csv(os.path.join(RES, "label_error_structure.csv"))
 
 doc = Document()
@@ -250,11 +251,15 @@ bullets([
 ])
 P("Deposits are traced upslope to the highest pixel on release-angle terrain (30–50°) within a "
   "600 m search radius, because susceptibility models predict release, not runout. This yields "
-  "6,364 candidate release points, of which 3,188 are flagged in four or more winters. Nine of "
-  "those fall on cells where at least one predictor is undefined and are dropped, so 3,179 enter "
-  "the analyses below; both figures are given wherever the inventory is described, since the "
-  "difference is otherwise easy to mistake for an inconsistency. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
+  "6,364 candidate release points, of which 3,188 are flagged in four or more winters. Occupied 10 km blocks cover 85% of the study area, so the inventory is "
   "not confined to road-accessible slopes.")
+
+P("One convention applies to every count reported below. A release point is discarded if any "
+  "predictor is undefined at its cell, which happens at raster edges and on a small number of "
+  "interior gaps. Inventory counts therefore exceed the sample sizes in the tables by a few points "
+  "at each recurrence threshold: 6,364 detected against 6,344 analysed at recurrence ≥ 3, 3,188 "
+  "against 3,179 at ≥ 4, 917 against 914 at ≥ 5, and 241 against 240 at ≥ 6. Figures quoted in the "
+  "text are detections; figures in tables are the points that entered a model.")
 
 H("3.2 Predictive factors", 2)
 P("Twenty predictors were assembled on a common 30 m UTM 43N grid: twelve topographic and two "
@@ -346,6 +351,19 @@ table(["Setting"] + [f"δ={c:g}" for c in piv.columns], rows,
       [2.2] + [0.62] * len(piv.columns),
       "Table 2. Null-model AUC under varying simulation settings.")
 
+P("The construction displaces absences along a single axis chosen to carry no information about "
+  "the outcome, which raises the question of whether that direction is special. It is not. "
+  "Distributing the same displacement across five axes, along a random direction in the "
+  "uninformative subspace, or partly along the informative axis itself — which is what an absence "
+  "rule favouring gentle terrain actually does — changes the null-arm AUC by at most 0.016 at any "
+  "displacement.")
+nul = dt[dt.arm == "null"]
+piv = nul.pivot(index="direction", columns="delta", values="auc")
+rows = [[i] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
+table(["Displacement direction"] + [f"δ={c:g}" for c in piv.columns], rows,
+      [2.0] + [0.62] * len(piv.columns),
+      "Table 3. Null-model AUC under different displacement directions.")
+
 H("4.2 How much skill a reported AUC can still express", 2)
 P("A natural response to Section 4.1 is to subtract the null baseline from the reported value and "
   "treat the remainder as the model's contribution. We tested whether that works, and it does not "
@@ -357,7 +375,7 @@ rows = [[f"{d:g}", f"{row.h:.3f}", f"{row.e:.3f}", f"{100*row.a/row.r:.0f}%"]
         for d, row in g.iterrows()]
 table(["δ (SD)", "Headroom (1 − baseline)", "Mean |error|", "True skill recovered"], rows,
       [0.9, 1.9, 1.3, 1.6],
-      "Table 3. Recovery of known true skill by subtraction, against absence displacement.")
+      "Table 4. Recovery of known true skill by subtraction, against absence displacement.")
 P("At δ = 0 the subtraction recovers the known skill almost exactly. At δ = 1 it recovers 46%, and "
   "at δ = 2 only 14%. The mechanism is not subtle: AUC is bounded above by unity, so the range "
   "available to express skill is 1 − B, where B is the null baseline. At δ = 3 that headroom is "
@@ -377,7 +395,7 @@ nice = {"gaussian": "Gaussian predictors", "correlated": "Correlated predictors"
 rows = [[nice.get(i, i)] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
 table(["Data structure"] + [f"δ={c:g}" for c in piv.columns], rows,
       [2.1] + [0.75] * len(piv.columns),
-      "Table 4. Mean absolute error of the subtraction, by data structure and displacement.")
+      "Table 5. Mean absolute error of the subtraction, by data structure and displacement.")
 figure("fig_headroom",
        "Figure 3. Headroom remaining on the AUC scale, and the fraction of known true skill that "
        "subtraction recovers, against absence displacement.")
@@ -392,7 +410,7 @@ rows = [[r.configuration, f"{r.delta:.2f}", f"{r.reported_auc:.3f}", f"{r.null_b
         for _, r in das.iterrows()]
 table(["Configuration", "δ", "Reported AUC", "Baseline", "Headroom", "Above baseline"], rows,
       [2.2, 0.6, 1.0, 0.9, 0.9, 1.1],
-      "Table 5. Absence separability, null baseline and remaining headroom for each configuration.")
+      "Table 6. Absence separability, null baseline and remaining headroom for each configuration.")
 P("The published protocol places its absences 7.06 standard deviations from its presences, leaving "
   "headroom of 0.000. Its reported value is therefore uninterpretable as evidence of skill: a model "
   "with no knowledge of avalanches scores the same. This is a statement about what the evaluation "
@@ -417,7 +435,7 @@ piv = sn.pivot(index="noise_rate", columns="delta", values="auc")
 rows = [[f"{int(100*i)}%"] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
 table(["Contaminated presences"] + [f"δ={c:g}" for c in piv.columns], rows,
       [1.9] + [0.63] * len(piv.columns),
-      "Table 6. Reported AUC under structured label contamination.")
+      "Table 7. Reported AUC under structured label contamination.")
 P("At δ = 0 contamination matters a great deal: reported AUC falls from 0.979 to 0.629 as the "
   "contaminated fraction rises to 80%. By δ = 3 the spread across contamination rates is 0.019, and "
   "by δ = 6 it is 0.001. At the separability of the published protocol an inventory that is 80% "
@@ -444,7 +462,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 7. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 8. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -467,7 +485,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 8. Controlled decomposition of reported performance.")
+      "Table 9. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -491,7 +509,7 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 9. Sensitivity of the decomposition to inventory confidence.")
+      "Table 10. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
        "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
 
@@ -499,7 +517,7 @@ H("4.6 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 10. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 11. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -516,7 +534,7 @@ rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", 
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 11. Effect of the background sampling ratio.")
+      "Table 12. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -530,7 +548,7 @@ P("Having removed the sources of inflation, we asked what genuinely raises perfo
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 12. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 13. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
