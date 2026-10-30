@@ -322,3 +322,54 @@ def direction_test(deltas=(0, 1, 2, 3, 4, 6), n=1500, d=8, n_rep=4,
         got = [r["auc"] for r in rows if r["direction"] == mode]
         print(f"  {mode:<28} " + "  ".join(f"{v:.3f}" for v in got), flush=True)
     return pd.DataFrame(rows)
+
+
+def compare_presence_only(deltas=(0, 1, 2, 3, 4, 6), n=1500, d=8, n_rep=4):
+    """Does an established presence-only method avoid the design dependence?
+
+    The paper's recommendation - redraw the absences - is only useful if something better exists.
+    Two standard treatments of presence-only data are compared against ordinary classification:
+
+      * Elkan & Noto (2008) PU correction. A classifier is trained on labelled-versus-unlabelled
+        data and its scores divided by c, the estimated probability that a positive is labelled.
+        Because c is a constant, the RANKING is unchanged, so AUC is identical to the naive model.
+        This is worth demonstrating rather than asserting: PU correction fixes calibration, not the
+        design dependence of a ranking statistic.
+      * A one-class model fitted to the PRESENCES ALONE, which never sees the absences and so
+        cannot inherit anything from how they were drawn.
+
+    Reported as AUC against a FIXED honest test set (absences undisplaced), so the three methods are
+    judged on the same question regardless of how their training absences were placed.
+    """
+    import pandas as pd
+    from sklearn.ensemble import IsolationForest, RandomForestClassifier
+
+    rows = []
+    for delta in deltas:
+        naive, pu, oneclass = [], [], []
+        for s in range(n_rep):
+            r = np.random.default_rng(s)
+            Xp = r.normal(0, 1, size=(n, d)); Xp[:, 0] = r.normal(1.2, 0.8, size=n)
+            Xa = r.normal(0, 1, size=(n, d)); Xa[:, 0] = r.normal(-1.2, 0.8, size=n)
+            Xa_tr = Xa.copy(); Xa_tr[:, 1] += delta          # training absences, displaced
+            Xtr = np.vstack([Xp, Xa_tr]); ytr = np.r_[np.ones(n, int), np.zeros(n, int)]
+
+            # honest test set: absences drawn the same way as presences, never displaced
+            rt = np.random.default_rng(1000 + s)
+            Tp = rt.normal(0, 1, size=(n, d)); Tp[:, 0] = rt.normal(1.2, 0.8, size=n)
+            Ta = rt.normal(0, 1, size=(n, d)); Ta[:, 0] = rt.normal(-1.2, 0.8, size=n)
+            Xte = np.vstack([Tp, Ta]); yte = np.r_[np.ones(n, int), np.zeros(n, int)]
+
+            m = RandomForestClassifier(n_estimators=300, n_jobs=-1, random_state=s).fit(Xtr, ytr)
+            p = m.predict_proba(Xte)[:, 1]
+            naive.append(roc_auc_score(yte, p))
+            c = float(np.mean(m.predict_proba(Xp)[:, 1]))     # Elkan-Noto label frequency
+            pu.append(roc_auc_score(yte, p / max(c, 1e-6)))
+            oc = IsolationForest(n_estimators=300, random_state=s).fit(Xp)
+            oneclass.append(roc_auc_score(yte, oc.score_samples(Xte)))
+        rows.append(dict(delta=delta, naive=float(np.mean(naive)),
+                         pu_corrected=float(np.mean(pu)), presence_only=float(np.mean(oneclass))))
+        print(f"  delta={delta:<3} naive {rows[-1]['naive']:.3f}  "
+              f"PU {rows[-1]['pu_corrected']:.3f}  presence-only {rows[-1]['presence_only']:.3f}",
+              flush=True)
+    return pd.DataFrame(rows)

@@ -36,6 +36,7 @@ th = pd.read_csv(os.path.join(RES, "correction_threshold.csv"))
 cv = pd.read_csv(os.path.join(RES, "correction_validation.csv"))
 sn = pd.read_csv(os.path.join(RES, "structured_noise.csv"))
 dt = pd.read_csv(os.path.join(RES, "direction_test.csv"))
+po = pd.read_csv(os.path.join(RES, "presence_only_comparison.csv"))
 les = pd.read_csv(os.path.join(RES, "label_error_structure.csv"))
 
 doc = Document()
@@ -448,7 +449,34 @@ P("The corollary constrains our own empirical figures. The corrected configurati
   "sensitive to inventory precision in a way the published protocol's 1.000 is not, and should be "
   "read with that in mind.")
 
-H("4.4 What each correction costs", 2)
+H("4.4 Training against bad absences versus reporting against them", 2)
+P("A distinction the preceding sections leave open is whether a model TRAINED on poorly chosen "
+  "absences is itself damaged, or whether only the number it reports is. We separate the two by "
+  "training on absences at varying displacement and evaluating every model on one fixed test set "
+  "whose absences are drawn like the presences — the evaluation the study should have run.")
+rows = [[f"{r.delta:g}", f"{r.naive:.3f}", f"{r.pu_corrected:.3f}", f"{r.presence_only:.3f}"]
+        for _, r in po.iterrows()]
+table(["Training δ", "Ordinary classifier", "PU-corrected", "Presence-only (one-class)"], rows,
+      [1.0, 1.6, 1.3, 1.9],
+      "Table 8. AUC on a fixed honest test set, by how the training absences were drawn.")
+P("Judged honestly, the ordinary classifier falls only from 0.975 to 0.952 as its training "
+  "absences are displaced from zero to three standard deviations. The model is largely unharmed; "
+  "what the displacement corrupts is the figure the study reports about itself. This is the more "
+  "accurate statement of the problem, and a more generous one: published susceptibility maps may "
+  "well be serviceable products whose accompanying statistics do not describe them.")
+P("Two established treatments of presence-only data behave as theory predicts. The Elkan and Noto "
+  "(2008) correction divides scores by the estimated labelling frequency, a constant, so the "
+  "ranking and hence the AUC are unchanged to three decimal places at every displacement: it "
+  "repairs calibration, not design dependence. A one-class model fitted to the presences alone "
+  "never sees the absences and is therefore perfectly design-independent, returning 0.819 at every "
+  "displacement, but it pays about 0.15 AUC for that robustness.")
+P("The practical implication is narrower than 'redraw your absences'. If absences must be "
+  "constructed, the evaluation set is where it matters: holding out absences drawn like the "
+  "presences costs nothing and makes the reported number interpretable. Where that is impossible, "
+  "a presence-only method trades discriminative power for a figure that does not depend on the "
+  "analyst's choices.")
+
+H("4.5 What each correction costs", 2)
 P("Two configurations recur below and must not be confused. CONFIGURATION C2 applies the melt-out "
   "filter and centroid-derived release points to the single-scale predictor set, and reaches AUC "
   "0.841. CONFIGURATION C3 adds the multi-scale terrain predictors of Section 4.7 to C2 and reaches "
@@ -462,7 +490,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 8. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 9. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -475,7 +503,7 @@ figure("fig_correction_ladder",
        "Figure 4. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
-H("4.5 Where reported performance comes from", 2)
+H("4.6 Where reported performance comes from", 2)
 rows = []
 lab = {"A": ("paper-style", "random"), "B": ("paper-style", "spatial-block"),
        "C": ("terrain-matched", "random"), "D": ("terrain-matched", "spatial-block")}
@@ -485,7 +513,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 9. Controlled decomposition of reported performance.")
+      "Table 10. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -509,15 +537,15 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 10. Sensitivity of the decomposition to inventory confidence.")
+      "Table 11. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
        "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
 
-H("4.6 Coarse predictors encode geography, not snowpack", 2)
+H("4.7 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 11. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 12. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -529,12 +557,12 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "than snowpack process.")
 figure("fig_geography_ablation", "Figure 7. Coarse predictors are interchangeable with coordinates.", 6.4)
 
-H("4.7 Reported AUC depends on the background sampling ratio", 2)
+H("4.8 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 12. Effect of the background sampling ratio.")
+      "Table 13. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -542,13 +570,13 @@ P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc
   "the model becomes less useful for the operational task. Precision-recall metrics should be "
   "reported alongside AUC.")
 
-H("4.8 What improves a corrected model, and what does not", 2)
+H("4.9 What improves a corrected model, and what does not", 2)
 P("Having removed the sources of inflation, we asked what genuinely raises performance. Four "
   "interventions were tried on the corrected inventory and evaluated identically.")
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 13. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 14. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
