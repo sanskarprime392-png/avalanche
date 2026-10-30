@@ -37,6 +37,8 @@ cv = pd.read_csv(os.path.join(RES, "correction_validation.csv"))
 sn = pd.read_csv(os.path.join(RES, "structured_noise.csv"))
 dt = pd.read_csv(os.path.join(RES, "direction_test.csv"))
 po = pd.read_csv(os.path.join(RES, "presence_only_comparison.csv"))
+idn = pd.read_csv(os.path.join(RES, "identifiability.csv"))
+en = pd.read_csv(os.path.join(RES, "empirical_null.csv"))
 les = pd.read_csv(os.path.join(RES, "label_error_structure.csv"))
 
 doc = Document()
@@ -163,18 +165,27 @@ P(
     "candidate release sites in the Chandra-Bhaga and Upper Beas basins of the Western Himalaya. "
     "Drawing absences from flat, vegetated, urban and cropland terrain, as this literature does, "
     "places them 7.06 standard deviations from the presences, where the simulation predicts that a "
-    "null model scores 1.000 — and 1.000 is what the protocol returns on real data. Subtracting the "
-    "score attributable to each design leaves the part contributed by the model: +0.000 for the "
-    "published protocol, +0.027 for terrain-matched absences, and +0.108 for aspect-matched "
-    "absences with corrected labels. Ranked by reported AUC the three configurations run 1.000, "
-    "0.954 and 0.866; ranked by what the model contributes the ordering is exactly reversed."
+    "null model scores 1.000 — and 1.000 is what the protocol returns on real data."
     " "
-    "Two further diagnostics show the same pattern from other directions: 1 km climate and 500 m "
-    "snow-cover predictors are statistically interchangeable with raw spatial coordinates, and "
-    "reported AUC can be raised simply by increasing the background sampling ratio while "
-    "precision-recall performance falls. We propose that susceptibility studies report their "
-    "absence separability alongside AUC, and the skill remaining once the design's own "
-    "contribution is removed; code and data to compute both are released.")
+    "We then show that the absolute skill of a presence-only model is not identifiable from the "
+    "data it was fitted to. Two synthetic worlds were constructed whose observed presence and "
+    "absence samples are nearly indistinguishable — their separations differ by 0.02 and their "
+    "reported AUCs by 0.043 — while their ability to rank genuinely susceptible terrain differs by "
+    "0.281. A difference between the two samples enters an AUC identically whether it arises "
+    "because presences are different terrain or because absences were drawn from elsewhere, so no "
+    "statistic computed from those samples can attribute it. We report our own failed attempts at a "
+    "correction for the same reason."
+    " "
+    "What remains identifiable is the relative effect of the absence design, obtained by holding "
+    "presences, predictors and model fixed and varying only the sampling: the published protocol "
+    "returns 1.000, terrain-matched absences 0.954, and aspect-matched absences with corrected "
+    "labels 0.866. Training on displaced absences and evaluating on a fixed honest test set shows "
+    "the model itself is little harmed, falling only from 0.975 to 0.952; what the design corrupts "
+    "is the figure a study reports about itself. Two further diagnostics agree: 1 km climate and "
+    "500 m snow-cover predictors are statistically interchangeable with raw spatial coordinates, "
+    "and reported AUC rises with the background sampling ratio while precision-recall performance "
+    "falls. We recommend that susceptibility studies hold out an evaluation set whose absences are "
+    "drawn like the presences; code and data are released.")
 P("Keywords: susceptibility mapping, pseudo-absence selection, sampling bias, model evaluation, "
   "presence-only data, snow avalanches, Sentinel-1, Western Himalaya", italic=True, size=9.5)
 
@@ -279,11 +290,14 @@ P("Four slope windows appear in the workflow and they are deliberately different
   "the steepest faces, which hold little snow and are not comparable terrain. The susceptibility "
   "map is masked to 28–60°, the potential-release-area definition of Bühler et al. (2018), so that "
   "areal statistics are comparable with other studies using that convention.")
-P("Because the background window directly sets the separability of the absence design, the "
-  "headline result was recomputed across four alternatives. Reported AUC varies with the choice — "
-  "0.844 at 20–60°, 0.866 at 25–55°, 0.873 at 28–60° and 0.875 at 30–50° — while design-adjusted "
-  "skill stays between +0.099 and +0.110. The design choice moves the reported number by 0.031 and "
-  "the adjusted quantity by 0.011, which is the behaviour the adjustment is intended to produce.")
+P("The background window sets the separability of the absence design directly, so the result was "
+  "recomputed across four alternatives. Reported AUC moves with the choice — 0.844 at 20–60°, "
+  "0.866 at 25–55°, 0.873 at 28–60° and 0.875 at 30–50° — a range of 0.031 produced by a decision "
+  "about which terrain counts as comparable, with the presences, predictors and model unchanged. "
+  "This is the paper's argument appearing within a single study: a defensible-looking choice moves "
+  "the reported number by more than the gap between several published models. The 25–55° window is "
+  "used throughout, and the alternatives are reported so the sensitivity is visible rather than "
+  "buried.")
 
 H("3.4 Sampling design", 2)
 P("Two absence schemes are compared. The PAPER-STYLE scheme reproduces published practice: points "
@@ -365,60 +379,48 @@ table(["Displacement direction"] + [f"δ={c:g}" for c in piv.columns], rows,
       [2.0] + [0.62] * len(piv.columns),
       "Table 3. Null-model AUC under different displacement directions.")
 
-H("4.2 How much skill a reported AUC can still express", 2)
-P("A natural response to Section 4.1 is to subtract the null baseline from the reported value and "
-  "treat the remainder as the model's contribution. We tested whether that works, and it does not "
-  "in general. Holding true skill fixed while varying δ, the subtraction should return a constant; "
-  "instead it decays, and it decays in proportion to how much range the AUC scale has left.")
-g = th.groupby("delta").agg(h=("headroom", "mean"), a=("adjusted", "mean"),
-                            r=("reference", "mean"), e=("error", lambda v: v.abs().mean()))
-rows = [[f"{d:g}", f"{row.h:.3f}", f"{row.e:.3f}", f"{100*row.a/row.r:.0f}%"]
-        for d, row in g.iterrows()]
-table(["δ (SD)", "Headroom (1 − baseline)", "Mean |error|", "True skill recovered"], rows,
-      [0.9, 1.9, 1.3, 1.6],
-      "Table 4. Recovery of known true skill by subtraction, against absence displacement.")
-P("At δ = 0 the subtraction recovers the known skill almost exactly. At δ = 1 it recovers 46%, and "
-  "at δ = 2 only 14%. The mechanism is not subtle: AUC is bounded above by unity, so the range "
-  "available to express skill is 1 − B, where B is the null baseline. At δ = 3 that headroom is "
-  "0.020 — the scale is saturated, and the information is destroyed rather than displaced. No "
-  "post-hoc arithmetic recovers it.")
-P("The failure is not peculiar to Gaussian predictors. Repeating the test with correlated "
-  "predictors, a nonlinear decision boundary, spatially clustered presences and 20% label noise "
-  "gives the same behaviour in every case: exact at δ = 0 and degrading from δ = 1 onward. "
-  "Clustering is the least forgiving, which matters because real inventories are clustered. The "
-  "error also grows with the amount of true skill present, since a model with more to express "
-  "loses more when the scale runs out of room.")
-piv = cv.pivot_table(index="structure", columns="delta", values="error",
-                     aggfunc=lambda v: float(np.mean(np.abs(v))))
-nice = {"gaussian": "Gaussian predictors", "correlated": "Correlated predictors",
-        "nonlinear": "Nonlinear boundary", "clustered": "Clustered presences",
-        "label_noise": "20% label noise"}
-rows = [[nice.get(i, i)] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
-table(["Data structure"] + [f"δ={c:g}" for c in piv.columns], rows,
-      [2.1] + [0.75] * len(piv.columns),
-      "Table 5. Mean absolute error of the subtraction, by data structure and displacement.")
-figure("fig_headroom",
-       "Figure 3. Headroom remaining on the AUC scale, and the fraction of known true skill that "
-       "subtraction recovers, against absence displacement.")
-P("We therefore do not propose design-adjusted skill as a correction to AUC. What the construction "
-  "supports is weaker and, we think, more useful: a test of whether a reported AUC is interpretable "
-  "at all. Report δ, obtain B by simulation at that δ, and report the headroom 1 − B. Where "
-  "headroom is small the reported AUC cannot distinguish a model that works from one that does "
-  "not, and the appropriate response is to redraw the absences rather than to adjust the score.")
-rows = [[r.configuration, f"{r.delta:.2f}", f"{r.reported_auc:.3f}", f"{r.null_baseline:.3f}",
-         f"{1 - r.null_baseline:.3f}",
-         ("—" if (1 - r.null_baseline) < 0.02 else f"{r.adjusted_skill:+.3f}")]
-        for _, r in das.iterrows()]
-table(["Configuration", "δ", "Reported AUC", "Baseline", "Headroom", "Above baseline"], rows,
-      [2.2, 0.6, 1.0, 0.9, 0.9, 1.1],
-      "Table 6. Absence separability, null baseline and remaining headroom for each configuration.")
-P("The published protocol places its absences 7.06 standard deviations from its presences, leaving "
-  "headroom of 0.000. Its reported value is therefore uninterpretable as evidence of skill: a model "
-  "with no knowledge of avalanches scores the same. This is a statement about what the evaluation "
-  "can show, not a claim that the underlying model is worthless — the distinction matters, and we "
-  "cannot test the latter without the original inventory. The corrected configuration leaves "
-  "headroom of 0.242 and exceeds its baseline by 0.108, which Table 4 indicates is a conservative "
-  "floor rather than an estimate, since at δ ≈ 1 subtraction recovers roughly half of true skill.")
+H("4.2 What a reported AUC cannot recover", 2)
+P("The natural response to Section 4.1 is to remove the design's contribution and keep the "
+  "remainder as the model's. We pursued that and report here why it cannot work, because the reason "
+  "is more informative than the method would have been.")
+P("An AUC is a function of two class-conditional distributions and nothing else. A difference "
+  "between presences and absences enters those distributions identically whether it arises because "
+  "presences are genuinely different terrain or because the absences were drawn from elsewhere. No "
+  "statistic computed from the two samples can attribute it, since the samples are all there is.")
+P("That this bites in practice, and not only in principle, can be shown by construction. Two "
+  "synthetic worlds were built. In the first, predictors are strongly related to true "
+  "susceptibility and absences are drawn from terrain like the presences. In the second, predictors "
+  "are weakly related and absences are drawn from further away. Parameters were chosen so the "
+  "observed clouds nearly coincide.")
+m = idn.mean(numeric_only=True)
+table(["World", "Observed presence–absence gap", "Reported AUC", "AUC against true absences"],
+      [["A  informative predictors, honest absences", f"{m.mean_gap_A:.3f}",
+        f"{m.reported_A:.3f}", f"{m.true_A:.3f}"],
+       ["B  weak predictors, displaced absences", f"{m.mean_gap_B:.3f}",
+        f"{m.reported_B:.3f}", f"{m.true_B:.3f}"]],
+      [2.5, 1.7, 1.0, 1.4],
+      "Table 4. Two worlds with nearly identical observable data and different true skill.")
+P(f"The observed separations differ by {abs(m.mean_gap_A - m.mean_gap_B):.3f} and the reported AUCs "
+  f"by {abs(m.reported_A - m.reported_B):.3f}. Measured against true absences — which no "
+  f"presence-only study possesses — the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
+  "times as much. Data that a study could not tell apart correspond to models that differ "
+  "substantially in what a reader cares about.")
+P("Attempts to construct a null baseline from a study's own data fail for the same reason, and we "
+  "report them so the obstacle is not mistaken for an oversight. Generating synthetic classes "
+  "matched to the observed means and covariances yields a baseline of 0.989 for the corrected "
+  "configuration, above its own reported AUC, because Gaussian clouds at those moments are easier "
+  "to separate than the real data: the construction discards exactly the within-class overlap that "
+  "makes the real problem hard. Resampling real rows within each class preserves the signal intact "
+  "and is therefore not a null at all. Nor is the separability measure canonical — for the "
+  f"published protocol the diagonal form gives {en.delta_diag.iloc[0]:.2f} standard deviations and "
+  f"the Mahalanobis form {en.delta_maha.iloc[0]:.2f}, so a baseline read off a δ axis inherits the "
+  "choice of measure.")
+P("We therefore withdraw any proposal to correct a reported AUC, and state the limit instead: the "
+  "absolute skill of a presence-only susceptibility model is not identifiable from the data it was "
+  "fitted to. What remains identifiable is the RELATIVE effect of the absence design, obtained by "
+  "holding the presences, the predictors and the model fixed and varying only how absences are "
+  "drawn. That comparison is the subject of the remaining sections, and it is available to any "
+  "study at the cost of running its own pipeline a second time.")
 
 H("4.3 Whether label error can account for the result", 2)
 P("Every configuration compared here uses identical labels, which controls for label quality only "
@@ -436,7 +438,7 @@ piv = sn.pivot(index="noise_rate", columns="delta", values="auc")
 rows = [[f"{int(100*i)}%"] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
 table(["Contaminated presences"] + [f"δ={c:g}" for c in piv.columns], rows,
       [1.9] + [0.63] * len(piv.columns),
-      "Table 7. Reported AUC under structured label contamination.")
+      "Table 5. Reported AUC under structured label contamination.")
 P("At δ = 0 contamination matters a great deal: reported AUC falls from 0.979 to 0.629 as the "
   "contaminated fraction rises to 80%. By δ = 3 the spread across contamination rates is 0.019, and "
   "by δ = 6 it is 0.001. At the separability of the published protocol an inventory that is 80% "
@@ -458,7 +460,7 @@ rows = [[f"{r.delta:g}", f"{r.naive:.3f}", f"{r.pu_corrected:.3f}", f"{r.presenc
         for _, r in po.iterrows()]
 table(["Training δ", "Ordinary classifier", "PU-corrected", "Presence-only (one-class)"], rows,
       [1.0, 1.6, 1.3, 1.9],
-      "Table 8. AUC on a fixed honest test set, by how the training absences were drawn.")
+      "Table 6. AUC on a fixed honest test set, by how the training absences were drawn.")
 P("Judged honestly, the ordinary classifier falls only from 0.975 to 0.952 as its training "
   "absences are displaced from zero to three standard deviations. The model is largely unharmed; "
   "what the displacement corrupts is the figure the study reports about itself. This is the more "
@@ -490,7 +492,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 9. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 7. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -500,7 +502,7 @@ P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully
   f"{abs(float(cl.delta.iloc[4])):.3f}, roughly six times as much. Inventory precision is not "
   "reported at all in the studies we reproduce, so this term is invisible in published work.")
 figure("fig_correction_ladder",
-       "Figure 4. Cumulative effect of each correction. Label quality removes more apparent skill "
+       "Figure 3. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
 H("4.6 Where reported performance comes from", 2)
@@ -513,7 +515,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 10. Controlled decomposition of reported performance.")
+      "Table 8. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -522,7 +524,7 @@ P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:
   f"changes performance by {a_xgb - b_xgb:+.3f}. The optimism is therefore attributable to sampling "
   "design, and essentially not at all to spatial autocorrelation.")
 figure("fig_leakage_decomposition",
-       "Figure 5. Decomposition of reported performance. Paper-style absences produce perfect "
+       "Figure 4. Decomposition of reported performance. Paper-style absences produce perfect "
        "separation regardless of the cross-validation scheme.")
 
 P("This result does not depend on the quality of our inventory. Repeating the contrast at four "
@@ -537,15 +539,15 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 11. Sensitivity of the decomposition to inventory confidence.")
+      "Table 9. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
-       "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
+       "Figure 5. The sampling artefact is independent of inventory size and label confidence.")
 
 H("4.7 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 12. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 10. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -555,14 +557,14 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
   "duration among the leading predictors may therefore be describing a geographic index rather "
   "than snowpack process.")
-figure("fig_geography_ablation", "Figure 7. Coarse predictors are interchangeable with coordinates.", 6.4)
+figure("fig_geography_ablation", "Figure 6. Coarse predictors are interchangeable with coordinates.", 6.4)
 
 H("4.8 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 13. Effect of the background sampling ratio.")
+      "Table 11. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -576,7 +578,7 @@ P("Having removed the sources of inflation, we asked what genuinely raises perfo
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 14. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 12. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
@@ -675,20 +677,24 @@ bullets([
     "Measured on that scale, a published avalanche susceptibility protocol places its absences "
     "7.06 standard deviations from its presences, where a null model is predicted to score 1.000. "
     "Run on an independent inventory, the protocol returns 1.000.",
-    "Subtracting the null baseline does not recover skill in general: tested against known true "
-    "skill it returns 46% at one standard deviation of displacement and 14% at two, because the "
-    "bounded AUC scale leaves progressively less room in which skill can appear.",
-    "What the construction does support is a test of interpretability. The published protocol "
-    "leaves headroom of 0.000 on the AUC scale, so its reported value cannot evidence skill "
-    "whatever the underlying model may be worth; the corrected configuration leaves 0.242 and "
-    "exceeds its baseline by at least 0.108.",
+    "The absolute skill of a presence-only susceptibility model is not identifiable from the data "
+    "it was fitted to. Two worlds with nearly indistinguishable observed samples differ by 0.281 in "
+    "their ability to rank genuinely susceptible terrain, and no statistic computed from those "
+    "samples can tell them apart. Proposals to correct a reported AUC, including our own, fail for "
+    "this reason rather than for want of a better estimator.",
+    "What is identifiable is the relative effect of the absence design, obtained by holding "
+    "presences, predictors and model fixed and varying only how absences are drawn. Any study can "
+    "run that comparison on its own pipeline.",
+    "Training on poorly drawn absences harms the model far less than it harms the number: on a "
+    "fixed honest test set performance falls only from 0.975 to 0.952 as displacement rises from "
+    "zero to three standard deviations.",
     "Two independent diagnostics agree: 1 km climate and 500 m snow-cover predictors are "
     "statistically interchangeable with raw spatial coordinates, and reported AUC rises with the "
     "background sampling ratio while precision-recall performance falls.",
-    "We recommend that susceptibility studies report their absence separability and the headroom "
-    "remaining on the AUC scale alongside the AUC itself. Where headroom is small the appropriate "
-    "response is to redraw the absences, not to adjust the score: the information has been "
-    "destroyed rather than displaced. Code is released.",
+    "We recommend that susceptibility studies hold out an evaluation set whose absences are drawn "
+    "like the presences. It costs nothing, needs no new statistic, and is the only step here that "
+    "makes a reported number interpretable. Where that is impossible, a presence-only method gives "
+    "a figure independent of the analyst's sampling choices at a cost of about 0.15 AUC.",
 ])
 
 H("Data and code availability", 1)

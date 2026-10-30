@@ -373,3 +373,114 @@ def compare_presence_only(deltas=(0, 1, 2, 3, 4, 6), n=1500, d=8, n_rep=4):
               f"PU {rows[-1]['pu_corrected']:.3f}  presence-only {rows[-1]['presence_only']:.3f}",
               flush=True)
     return pd.DataFrame(rows)
+
+
+def empirical_null(df, label_col="label", feature_cols=None, n_rep=12, seed=0,
+                   model="rf", method="moments"):
+    """Null baseline built from the study's OWN data rather than from a generic simulation.
+
+    The baseline used elsewhere comes from Gaussian synthetic data located on a δ axis, which
+    assumes that a real study's absence design can be mapped onto that axis. This avoids the
+    mapping entirely. Presences and absences are replaced by synthetic draws that reproduce their
+    observed means and covariances but contain NO relationship between predictors and outcome
+    beyond those moments. Whatever AUC a classifier then achieves is produced by the sampling design
+    acting through the real predictor structure.
+
+    method="moments" draws from multivariate normals matched to each class.
+    method="permute" instead resamples the real rows of each class with replacement, preserving the
+    marginal distributions exactly, including skew and heavy tails.
+    """
+    rng = np.random.default_rng(seed)
+    drop = {label_col, "x", "y", "block_id", "lon", "lat", "event", "tier", "zone",
+            "added", "recurrence", "area_m2", "year", "date_before", "date_after", "window_days"}
+    feats = feature_cols or [c for c in df.columns
+                             if c not in drop and np.issubdtype(df[c].dtype, np.number)]
+    P = df.loc[df[label_col] == 1, feats].to_numpy(float)
+    A = df.loc[df[label_col] == 0, feats].to_numpy(float)
+    P = P[np.isfinite(P).all(axis=1)]
+    A = A[np.isfinite(A).all(axis=1)]
+
+    aucs = []
+    for s in range(n_rep):
+        r = np.random.default_rng(seed + s)
+        if method == "moments":
+            Sp = np.cov(P, rowvar=False) + np.eye(len(feats)) * 1e-6
+            Sa = np.cov(A, rowvar=False) + np.eye(len(feats)) * 1e-6
+            Xp = r.multivariate_normal(P.mean(0), Sp, size=len(P))
+            Xa = r.multivariate_normal(A.mean(0), Sa, size=len(A))
+        else:
+            Xp = P[r.integers(0, len(P), len(P))]
+            Xa = A[r.integers(0, len(A), len(A))]
+        X = np.vstack([Xp, Xa])
+        y = np.r_[np.ones(len(Xp), int), np.zeros(len(Xa), int)]
+        aucs.append(_fit_auc(X, y, s, model=model))
+    return dict(baseline=float(np.mean(aucs)), sd=float(np.std(aucs)),
+                headroom=1.0 - float(np.mean(aucs)), n_features=len(feats), method=method)
+
+
+def mahalanobis_separability(df, label_col="label", feature_cols=None):
+    """Separability using the pooled covariance, as a check on the diagonal measure."""
+    from scipy.linalg import pinvh
+    drop = {label_col, "x", "y", "block_id", "lon", "lat", "event", "tier", "zone",
+            "added", "recurrence", "area_m2", "year", "date_before", "date_after", "window_days"}
+    feats = feature_cols or [c for c in df.columns
+                             if c not in drop and np.issubdtype(df[c].dtype, np.number)]
+    P = df.loc[df[label_col] == 1, feats].to_numpy(float)
+    A = df.loc[df[label_col] == 0, feats].to_numpy(float)
+    P = P[np.isfinite(P).all(axis=1)]
+    A = A[np.isfinite(A).all(axis=1)]
+    diff = P.mean(0) - A.mean(0)
+    Sp = ((len(P) - 1) * np.cov(P, rowvar=False) + (len(A) - 1) * np.cov(A, rowvar=False)) \
+        / (len(P) + len(A) - 2)
+    return float(np.sqrt(max(diff @ pinvh(Sp) @ diff, 0.0)))
+
+
+def identifiability_demo(n=4000, d=6, n_rep=6, seed=0):
+    """Can design and signal be separated from presence/absence data alone?
+
+    Two worlds are constructed. In world A the predictors carry a strong relationship to true
+    susceptibility and the absences are drawn from terrain like the presences. In world B the
+    predictors carry a weak relationship and the absences are drawn from further away. The
+    parameters are chosen so that the OBSERVED presence and absence clouds are statistically
+    indistinguishable between the two worlds.
+
+    If the observed data match, then every statistic computed from them matches, AUC included, while
+    the quantity a reader cares about - how well the model ranks genuinely susceptible terrain -
+    differs. Measured against TRUE absences, which no real study possesses, the two worlds separate.
+
+    This is a constructive demonstration that absolute skill is not identifiable from presence-only
+    data. What remains identifiable is the RELATIVE effect of changing the absence design while
+    holding presences and model fixed, which is what the decomposition in this paper measures.
+    """
+    import pandas as pd
+    rows = []
+    for s in range(n_rep):
+        r = np.random.default_rng(seed + s)
+
+        # world A: informative predictors, honest absences
+        sA = r.normal(0, 1, n)                      # latent susceptibility
+        Pa = r.normal(0, 1, size=(n, d)); Pa[:, 0] = 1.0 * sA[:n] + 1.2
+        Aa = r.normal(0, 1, size=(n, d)); Aa[:, 0] = r.normal(-1.2, 1.0, n)
+        Ta = r.normal(0, 1, size=(n, d)); Ta[:, 0] = r.normal(-1.2, 1.0, n)   # true absences
+
+        # world B: weak predictors, displaced absences, tuned to the same observed clouds
+        Pb = r.normal(0, 1, size=(n, d)); Pb[:, 0] = r.normal(1.2, np.sqrt(2.0), n)
+        Ab = r.normal(0, 1, size=(n, d)); Ab[:, 0] = r.normal(-1.2, 1.0, n)
+        Tb = r.normal(0, 1, size=(n, d)); Tb[:, 0] = r.normal(0.9, 1.0, n)    # true absences
+                                                                              # overlap presences
+        def auc_of(P, A, T=None):
+            X = np.vstack([P, A]); y = np.r_[np.ones(len(P), int), np.zeros(len(A), int)]
+            from sklearn.ensemble import RandomForestClassifier
+            m = RandomForestClassifier(n_estimators=250, n_jobs=-1, random_state=s).fit(X, y)
+            if T is None:
+                return _fit_auc(X, y, s)
+            Xe = np.vstack([P, T]); ye = np.r_[np.ones(len(P), int), np.zeros(len(T), int)]
+            return roc_auc_score(ye, m.predict_proba(Xe)[:, 1])
+
+        rows.append(dict(rep=s,
+                         reported_A=auc_of(Pa, Aa), reported_B=auc_of(Pb, Ab),
+                         true_A=auc_of(Pa, Aa, Ta), true_B=auc_of(Pb, Ab, Tb),
+                         mean_gap_A=float(Pa[:, 0].mean() - Aa[:, 0].mean()),
+                         mean_gap_B=float(Pb[:, 0].mean() - Ab[:, 0].mean())))
+    df = pd.DataFrame(rows)
+    return df
