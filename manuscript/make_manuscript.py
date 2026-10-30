@@ -360,24 +360,8 @@ P("A synthetic result invites the objection that it reflects the authors' constr
   "settings the null-model AUC differs by at most 0.030 at any displacement, and by 0.001 at "
   "δ = 6. The behaviour is a property of evaluating a presence-only model against constructed "
   "absences, not of this particular simulation.")
-piv = rb.pivot(index="setting", columns="delta", values="auc")
-rows = [[idx] + [f"{piv.loc[idx, c]:.3f}" for c in piv.columns] for idx in piv.index]
-table(["Setting"] + [f"δ={c:g}" for c in piv.columns], rows,
-      [2.2] + [0.62] * len(piv.columns),
-      "Table 2. Null-model AUC under varying simulation settings.")
-
-P("The construction displaces absences along a single axis chosen to carry no information about "
-  "the outcome, which raises the question of whether that direction is special. It is not. "
-  "Distributing the same displacement across five axes, along a random direction in the "
-  "uninformative subspace, or partly along the informative axis itself — which is what an absence "
-  "rule favouring gentle terrain actually does — changes the null-arm AUC by at most 0.016 at any "
-  "displacement.")
-nul = dt[dt.arm == "null"]
-piv = nul.pivot(index="direction", columns="delta", values="auc")
-rows = [[i] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
-table(["Displacement direction"] + [f"δ={c:g}" for c in piv.columns], rows,
-      [2.0] + [0.62] * len(piv.columns),
-      "Table 3. Null-model AUC under different displacement directions.")
+P("Full results for both invariance checks are given in the supplementary material "
+  "(Tables S1 and S2).")
 
 H("4.2 What a reported AUC cannot recover", 2)
 P("The natural response to Section 4.1 is to remove the design's contribution and keep the "
@@ -399,7 +383,7 @@ table(["World", "Observed presence–absence gap", "Reported AUC", "AUC against 
        ["B  weak predictors, displaced absences", f"{m.mean_gap_B:.3f}",
         f"{m.reported_B:.3f}", f"{m.true_B:.3f}"]],
       [2.5, 1.7, 1.0, 1.4],
-      "Table 4. Two worlds with nearly identical observable data and different true skill.")
+      "Table 2. Two worlds with nearly identical observable data and different true skill.")
 P(f"The observed separations differ by {abs(m.mean_gap_A - m.mean_gap_B):.3f} and the reported AUCs "
   f"by {abs(m.reported_A - m.reported_B):.3f}. Measured against true absences — which no "
   f"presence-only study possesses — the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
@@ -438,7 +422,7 @@ piv = sn.pivot(index="noise_rate", columns="delta", values="auc")
 rows = [[f"{int(100*i)}%"] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
 table(["Contaminated presences"] + [f"δ={c:g}" for c in piv.columns], rows,
       [1.9] + [0.63] * len(piv.columns),
-      "Table 5. Reported AUC under structured label contamination.")
+      "Table 3. Reported AUC under structured label contamination.")
 P("At δ = 0 contamination matters a great deal: reported AUC falls from 0.979 to 0.629 as the "
   "contaminated fraction rises to 80%. By δ = 3 the spread across contamination rates is 0.019, and "
   "by δ = 6 it is 0.001. At the separability of the published protocol an inventory that is 80% "
@@ -460,7 +444,7 @@ rows = [[f"{r.delta:g}", f"{r.naive:.3f}", f"{r.pu_corrected:.3f}", f"{r.presenc
         for _, r in po.iterrows()]
 table(["Training δ", "Ordinary classifier", "PU-corrected", "Presence-only (one-class)"], rows,
       [1.0, 1.6, 1.3, 1.9],
-      "Table 6. AUC on a fixed honest test set, by how the training absences were drawn.")
+      "Table 4. AUC on a fixed honest test set, by how the training absences were drawn.")
 P("Judged honestly, the ordinary classifier falls only from 0.975 to 0.952 as its training "
   "absences are displaced from zero to three standard deviations. The model is largely unharmed; "
   "what the displacement corrupts is the figure the study reports about itself. This is the more "
@@ -492,7 +476,7 @@ P("Five corrections separate the published protocol from a defensible estimate. 
 rows = [[r.configuration.replace("+ ", ""), f"{r.roc_auc:.3f}", str(r.delta),
          r["what it removes"]] for _, r in cl.iterrows()]
 table(["Configuration", "AUC", "Δ", "What it removes"], rows, [2.5, 0.7, 0.6, 2.0],
-      "Table 7. Cumulative effect of each methodological correction (XGBoost).")
+      "Table 5. Cumulative effect of each methodological correction (XGBoost).")
 P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully corrected "
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
@@ -515,7 +499,7 @@ for cfg in ("A", "B", "C", "D"):
     rows.append([cfg, lab[cfg][0], lab[cfg][1], f"{rf_v:.3f}", f"{xg_v:.3f}"])
 table(["Config", "Absences", "Cross-validation", "AUC (RF)", "AUC (XGBoost)"], rows,
       [0.7, 1.5, 1.5, 1.1, 1.3],
-      "Table 8. Controlled decomposition of reported performance.")
+      "Table 6. Controlled decomposition of reported performance.")
 P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:.3f}: the two "
   f"classes are perfectly separable. Replacing the absences with terrain-matched background points "
   f"(A→C) costs {a_xgb - c_xgb:.3f} AUC for XGBoost and "
@@ -539,7 +523,7 @@ for mr in sorted(ls.min_recurrence.unique()):
                  f"{A.roc_auc.iloc[0] - D.roc_auc.iloc[0]:.3f}"])
 table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], rows,
       [1.0, 1.1, 1.1, 1.2, 1.1],
-      "Table 9. Sensitivity of the decomposition to inventory confidence.")
+      "Table 7. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
        "Figure 5. The sampling artefact is independent of inventory size and label confidence.")
 
@@ -547,7 +531,7 @@ H("4.7 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
         for _, r in ga.iterrows()]
 table(["Predictor set", "n", "AUC", "95% CI"], rows, [2.6, 0.5, 0.9, 1.5],
-      "Table 10. Replacing coarse predictors with raw spatial coordinates.")
+      "Table 8. Replacing coarse predictors with raw spatial coordinates.")
 full = ga[ga.variant.str.contains("full")].roc_auc.iloc[0]
 repl = ga[ga.variant.str.contains("REPLACED")].roc_auc.iloc[0]
 P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers with two raw "
@@ -564,7 +548,7 @@ rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", 
         for _, r in br.iterrows()]
 table(["Presence:background", "Prevalence", "AUC", "PR-AUC", "Brier"], rows,
       [1.6, 1.0, 0.9, 0.9, 0.9],
-      "Table 11. Effect of the background sampling ratio.")
+      "Table 9. Effect of the background sampling ratio.")
 P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc.iloc[0]:.3f} to "
   f"{br.roc_auc.iloc[-1]:.3f} while precision-recall AUC falls from {br.pr_auc.iloc[0]:.3f} to "
   f"{br.pr_auc.iloc[-1]:.3f}. Because presence-background prevalence is a modelling choice rather "
@@ -578,7 +562,7 @@ P("Having removed the sources of inflation, we asked what genuinely raises perfo
 rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
-      "Table 12. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
+      "Table 10. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
   "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
@@ -698,6 +682,12 @@ bullets([
 ])
 
 H("Data and code availability", 1)
+P("The design comparison this paper recommends is packaged as designcheck.py in the repository, "
+  "which runs independently of the rest of the code. Given a table of predictor values at event "
+  "locations and a pool of candidate absence locations, it scores one model against several "
+  "absence designs and reports the spread, so any presence-only susceptibility study can measure "
+  "how much of its reported figure the sampling accounts for. Supplementary Section S5 gives a "
+  "worked example on the data used here.")
 P("All code is openly available at https://github.com/sanskarprime392-png/avalanche. The avalanche "
   "inventory derived in this study, the trained susceptibility rasters and all result tables are "
   "reproducible from that repository using openly licensed input data (NASADEM, Sentinel-1, "
