@@ -110,8 +110,8 @@ def figure(name, caption, width=6.0):
 # ---------------------------------------------------------------- title
 t = doc.add_paragraph()
 t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-r = t.add_run("Reported accuracy in geohazard susceptibility mapping is a function of the "
-              "absence sampling design")
+r = t.add_run("The reported AUC of a geohazard susceptibility model is a function of "
+              "its absence sampling design")
 r.bold = True
 r.font.size = Pt(17)
 r.font.color.rgb = NAVY
@@ -179,9 +179,10 @@ P(
     "What remains identifiable is the relative effect of the absence design, obtained by holding "
     "presences, predictors and model fixed and varying only the sampling: the published protocol "
     "returns 1.000, terrain-matched absences 0.954, and aspect-matched absences with corrected "
-    "labels 0.866. Training on displaced absences and evaluating on a fixed honest test set shows "
-    "the model itself is little harmed, falling only from 0.975 to 0.952; what the design corrupts "
-    "is the figure a study reports about itself. Two further diagnostics agree: 1 km climate and "
+    "labels 0.866. Training on displaced absences and scoring against a reference set of true "
+    "non-events — available in simulation, where the generating process is known — shows the model "
+    "itself is little harmed, falling only from 0.975 to 0.952; what the design corrupts is the "
+    "figure a study reports about itself. Two further diagnostics agree: 1 km climate and "
     "500 m snow-cover predictors are statistically interchangeable with raw spatial coordinates, "
     "and reported AUC rises with the background sampling ratio while precision-recall performance "
     "falls. We recommend that susceptibility studies hold out an evaluation set whose absences are "
@@ -447,14 +448,17 @@ P("The corollary constrains our own empirical figures. The corrected configurati
 H("4.4 Training against bad absences versus reporting against them", 2)
 P("A distinction the preceding sections leave open is whether a model TRAINED on poorly chosen "
   "absences is itself damaged, or whether only the number it reports is. We separate the two by "
-  "training on absences at varying displacement and evaluating every model on one fixed test set "
-  "whose absences are drawn like the presences — the evaluation the study should have run.")
+  "training on absences at varying displacement and evaluating every model on one fixed reference "
+  "set. In the simulation that reference set is available because the data-generating process is "
+  "known: its negatives are drawn from the region where true susceptibility is low, so they are "
+  "genuine non-events rather than merely comparable terrain. No real presence-only study has this, "
+  "and the distinction is developed in Section 5.2.")
 rows = [[f"{r.delta:g}", f"{r.naive:.3f}", f"{r.pu_corrected:.3f}", f"{r.presence_only:.3f}"]
         for _, r in po.iterrows()]
 table(["Training δ", "Ordinary classifier", "PU-corrected", "Presence-only (one-class)"], rows,
       [1.0, 1.6, 1.3, 1.9],
-      "Table 4. AUC on a fixed honest test set, by how the training absences were drawn.")
-P("Judged honestly, the ordinary classifier falls only from 0.975 to 0.952 as its training "
+      "Table 4. AUC on a fixed reference set of true non-events, by how the training absences were drawn. Such a set exists only in simulation.")
+P("Judged against true non-events, the ordinary classifier falls only from 0.975 to 0.952 as its training "
   "absences are displaced from zero to three standard deviations. The model is largely unharmed; "
   "what the displacement corrupts is the figure the study reports about itself. This is the more "
   "accurate statement of the problem, and a more generous one: published susceptibility maps may "
@@ -499,6 +503,14 @@ figure("fig_correction_ladder",
        "than sampling design and spatial validation combined.")
 
 H("4.6 Where reported performance comes from", 2)
+P("The decomposition below and the ladder in Section 4.5 use DIFFERENT LABEL SETS, which accounts "
+  "for figures that otherwise appear inconsistent. The decomposition isolates the effect of "
+  "absence sampling and cross-validation alone, so it holds the labels at the recurrence ≥ 4 "
+  "inventory throughout and reaches 0.939 under terrain-matched absences with spatial-block "
+  "validation. The ladder continues past that point by also correcting the labels — applying the "
+  "melt-out filter and centroid-derived release points — which is what takes configuration C2 to "
+  "0.841. The 0.098 between them is the cost of the label correction, reported as the final rung "
+  "of the ladder, and is not a disagreement between the two tables.")
 rows = []
 lab = {"A": ("paper-style", "random"), "B": ("paper-style", "spatial-block"),
        "C": ("terrain-matched", "random"), "D": ("terrain-matched", "spatial-block")}
@@ -616,12 +628,22 @@ P("What a study can do instead is measure how much its own reported figure depen
   "varying only how absences are drawn, isolates the contribution of the sampling design. The "
   "result is not a corrected accuracy and should not be reported as one: it is a sensitivity, "
   "analogous to reporting how a result moves under a plausible alternative specification.")
+P("Three kinds of evaluation must be kept apart, because they answer different questions and this "
+  "literature often treats them as one. VERIFIED NON-OCCURRENCE evaluation scores a model against "
+  "locations independently established to have had no event; it is the only one that measures what "
+  "a susceptibility map is read as claiming, and it is almost never available. MATCHED BACKGROUND "
+  "evaluation scores against locations drawn to resemble the presences in terrain; it removes the "
+  "separability that Section 4.1 describes, but it does NOT establish that those locations are "
+  "avalanche-free, and a matched background point may simply be a site where nothing has yet been "
+  "recorded. PRESENCE-ONLY evaluation avoids constructed negatives entirely at a cost in "
+  "discriminative power, as Section 4.4 shows. Matched background evaluation is an improvement on "
+  "mismatched background evaluation; it is not ground truth, and describing it as such would "
+  "reproduce in a different form the conflation this paper is about.")
 P("Concretely, we suggest four things. Report the absence rule explicitly, in enough detail that "
   "it could be reimplemented. Run the same pipeline under at least two defensible absence designs "
-  "and report the range of AUC obtained. Where an independent evaluation set can be constructed "
-  "whose absences are drawn like the presences, report performance against it, since that figure "
-  "is interpretable in a way the in-sample one is not. And treat a large spread across designs as "
-  "what it is — evidence that the headline number describes the experiment rather than the model.")
+  "and report the range of AUC obtained. State which of the three evaluations above a reported "
+  "figure represents. And treat a large spread across designs as what it is — evidence that the "
+  "headline number describes the experiment rather than the model.")
 P("On the data used here that spread is 0.031 across four absence designs, from 0.923 with "
   "absences matched on slope to 0.954 with absences drawn at random from the candidate pool, which "
   "is the common default. That range is wider than the differences typically reported between "
@@ -689,16 +711,18 @@ bullets([
     "What is identifiable is the relative effect of the absence design, obtained by holding "
     "presences, predictors and model fixed and varying only how absences are drawn. Any study can "
     "run that comparison on its own pipeline.",
-    "Training on poorly drawn absences harms the model far less than it harms the number: on a "
-    "fixed honest test set performance falls only from 0.975 to 0.952 as displacement rises from "
-    "zero to three standard deviations.",
+    "Training on poorly drawn absences harms the model far less than it harms the number: scored "
+    "against true non-events, performance falls only from 0.975 to 0.952 as displacement rises "
+    "from zero to three standard deviations.",
     "Two independent diagnostics agree: 1 km climate and 500 m snow-cover predictors are "
     "statistically interchangeable with raw spatial coordinates, and reported AUC rises with the "
     "background sampling ratio while precision-recall performance falls.",
-    "We recommend that susceptibility studies hold out an evaluation set whose absences are drawn "
-    "like the presences. It costs nothing, needs no new statistic, and is the only step here that "
-    "makes a reported number interpretable. Where that is impossible, a presence-only method gives "
-    "a figure independent of the analyst's sampling choices at a cost of about 0.15 AUC.",
+    "We recommend that susceptibility studies report the absence rule explicitly, run the pipeline "
+    "under at least two defensible absence designs and report the range, and state whether a "
+    "quoted figure comes from verified non-occurrence data, from matched background, or from a "
+    "presence-only method. Matched background evaluation removes the separability described here "
+    "but does not establish that those locations are event-free, and should not be presented as "
+    "ground truth.",
 ])
 
 H("Data and code availability", 1)
@@ -732,35 +756,72 @@ H("References", 1)
 for i, r in enumerate([
     "Abhinav, A. & Sattar, A. (2025). Snow avalanche susceptibility, hazard, and exposure "
     "assessment in the Western Himalaya using machine learning and numerical modelling. Scientific "
-    "Reports, 15, 38093.",
+    "Reports, 15, 38093. https://doi.org/10.1038/s41598-025-22051-w",
     "Barbet-Massin, M., Jiguet, F., Albert, C. H. & Thuiller, W. (2012). Selecting pseudo-absences "
     "for species distribution models: how, where and how many? Methods in Ecology and Evolution, "
-    "3, 327-338.",
+    "3, 327-338. https://doi.org/10.1111/j.2041-210X.2011.00172.x",
+    "Bekker, J. & Davis, J. (2020). Learning from positive and unlabeled data: a survey. Machine "
+    "Learning, 109, 719-760. https://doi.org/10.1007/s10994-020-05877-5",
+    "Brenning, A. (2012). Spatial cross-validation and bootstrap for the assessment of prediction "
+    "rules in remote sensing. IEEE International Geoscience and Remote Sensing Symposium, "
+    "5372-5375. https://doi.org/10.1109/IGARSS.2012.6352393",
     "Bühler, Y., von Rickenbach, D., Stoffel, A., Margreth, S., Stoffel, L. & Christen, M. (2018). "
     "Automated snow avalanche release area delineation. Natural Hazards and Earth System Sciences, "
-    "18, 3235-3251.",
+    "18, 3235-3251. https://doi.org/10.5194/nhess-18-3235-2018",
     "Cetinkaya, S. & Kocaman, S. (2023). Impact of learning set and sampling for snow avalanche "
-    "susceptibility mapping with random forest. ISPRS Archives, XLVIII-M-1, 57-64.",
+    "susceptibility mapping with random forest. ISPRS Archives, XLVIII-M-1, 57-64. "
+    "https://doi.org/10.5194/isprs-archives-XLVIII-M-1-2023-57-2023",
+    "Chawla, N. V., Bowyer, K. W., Hall, L. O. & Kegelmeyer, W. P. (2002). SMOTE: synthetic "
+    "minority over-sampling technique. Journal of Artificial Intelligence Research, 16, 321-357. "
+    "https://doi.org/10.1613/jair.953",
     "Eckerstorfer, M., Vickers, H., Malnes, E. & Grahn, J. (2019). Near-real time automatic snow "
     "avalanche activity monitoring system using Sentinel-1 SAR data in Norway. Remote Sensing, 11, "
-    "2863.",
+    "2863. https://doi.org/10.3390/rs11232863",
     "Elkan, C. & Noto, K. (2008). Learning classifiers from only positive and unlabeled data. "
     "Proceedings of the 14th ACM SIGKDD International Conference on Knowledge Discovery and Data "
-    "Mining, 213-220.",
+    "Mining, 213-220. https://doi.org/10.1145/1401890.1401920",
+    "Elith, J. et al. (2006). Novel methods improve prediction of species' distributions from "
+    "occurrence data. Ecography, 29, 129-151. "
+    "https://doi.org/10.1111/j.2006.0906-7590.04596.x",
+    "Hanley, J. A. & McNeil, B. J. (1982). The meaning and use of the area under a receiver "
+    "operating characteristic (ROC) curve. Radiology, 143, 29-36. "
+    "https://doi.org/10.1148/radiology.143.1.7063747",
+    "Hastie, T. & Fithian, W. (2013). Inference from presence-only data: the ongoing controversy. "
+    "Ecography, 36, 864-867. https://doi.org/10.1111/j.1600-0587.2013.00321.x",
     "Lobo, J. M., Jiménez-Valverde, A. & Real, R. (2008). AUC: a misleading measure of the "
-    "performance of predictive distribution models. Global Ecology and Biogeography, 17, 145-151.",
+    "performance of predictive distribution models. Global Ecology and Biogeography, 17, 145-151. "
+    "https://doi.org/10.1111/j.1466-8238.2007.00358.x",
+    "Meyer, H., Reudenbach, C., Wöllauer, S. & Nauss, T. (2019). Importance of spatial predictor "
+    "variable selection in machine learning applications. Ecological Modelling, 411, 108815. "
+    "https://doi.org/10.1016/j.ecolmodel.2019.108815",
+    "Phillips, S. J., Anderson, R. P. & Schapire, R. E. (2006). Maximum entropy modeling of species "
+    "geographic distributions. Ecological Modelling, 190, 231-259. "
+    "https://doi.org/10.1016/j.ecolmodel.2005.03.026",
     "Phillips, S. J., Dudík, M., Elith, J., Graham, C. H., Lehmann, A., Leathwick, J. & Ferrier, S. "
     "(2009). Sample selection bias and presence-only distribution models. Ecological Applications, "
-    "19, 181-197.",
+    "19, 181-197. https://doi.org/10.1890/07-2153.1",
     "Ploton, P. et al. (2020). Spatial validation reveals poor predictive performance of "
-    "large-scale ecological mapping models. Nature Communications, 11, 4540.",
+    "large-scale ecological mapping models. Nature Communications, 11, 4540. "
+    "https://doi.org/10.1038/s41467-020-18321-y",
     "Roberts, D. R. et al. (2017). Cross-validation strategies for data with temporal, spatial, "
-    "hierarchical, or phylogenetic structure. Ecography, 40, 913-929.",
+    "hierarchical, or phylogenetic structure. Ecography, 40, 913-929. "
+    "https://doi.org/10.1111/ecog.02881",
+    "Saito, T. & Rehmsmeier, M. (2015). The precision-recall plot is more informative than the ROC "
+    "plot when evaluating binary classifiers on imbalanced datasets. PLOS ONE, 10, e0118432. "
+    "https://doi.org/10.1371/journal.pone.0118432",
     "Sahin, E. K., Ipbuker, C. & Kavzoglu, T. (2023). Strategies for sampling pseudo-absences of "
     "landslide locations for landslide susceptibility mapping in complex mountainous terrain of "
-    "Northwest Himalaya. Bulletin of Engineering Geology and the Environment, 82, 397.",
+    "Northwest Himalaya. Bulletin of Engineering Geology and the Environment, 82, 397. "
+    "https://doi.org/10.1007/s10064-023-03333-x",
+    "Valavi, R., Elith, J., Lahoz-Monfort, J. J. & Guillera-Arroita, G. (2019). blockCV: an R "
+    "package for generating spatially or environmentally separated folds. Methods in Ecology and "
+    "Evolution, 10, 225-232. https://doi.org/10.1111/2041-210X.13107",
+    "Ward, G., Hastie, T., Barry, S., Elith, J. & Leathwick, J. R. (2009). Presence-only data and "
+    "the EM algorithm. Biometrics, 65, 554-563. "
+    "https://doi.org/10.1111/j.1541-0420.2008.01116.x",
     "Winstral, A., Elder, K. & Davis, R. E. (2002). Spatial snow modeling of wind-redistributed "
-    "snow using terrain-based parameters. Journal of Hydrometeorology, 3, 524-538.",
+    "snow using terrain-based parameters. Journal of Hydrometeorology, 3, 524-538. "
+    "https://doi.org/10.1175/1525-7541(2002)003<0524:SSMOWR>2.0.CO;2",
 ], 1):
     doc.add_paragraph(f"[{i}]  {r}", style="List Paragraph")
 
