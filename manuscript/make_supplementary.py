@@ -154,5 +154,28 @@ P("designcheck.py in the repository runs the design comparison on any presence-o
   "and 0.024 between the random default and the most thoroughly matched design. Either figure is "
   "produced entirely by the sampling, with presences, predictors and model unchanged.")
 
+H("S6  Invariance to the presence-to-background ratio", 1)
+P("Susceptibility studies draw background points at ratios from 1:1 to 1:10 and the choice is "
+  "rarely justified. Because a ratio change alters both the class balance and the effective sample "
+  "size, the null arm was repeated across four ratios. Null-model AUC varies by at most 0.024 at "
+  "any displacement, so the inflation reported in Section 4.1 is not an artefact of the 1:1 design "
+  "used elsewhere in this work.")
+pv = pd.read_csv(os.path.join(RES, "prevalence_test.csv"))
+piv = pv.pivot(index="ratio", columns="delta", values="auc")
+table(["Presence : background"] + [f"d={c:g}" for c in piv.columns],
+      [[i] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index],
+      [1.8] + [0.62] * len(piv.columns),
+      "Table S6. Null-model AUC by presence-to-background ratio.")
+
+H("S7  Statistical reporting", 1)
+P("All simulation figures are means over independent replications, each drawing a fresh dataset "
+  "and refitting the model. Seeds are the replication index, beginning at 0, so every result is "
+  "reproducible by re-running the corresponding function with its default arguments. Replication "
+  "counts are 20 for the curve in Table 1, 8 for the invariance checks in Tables S1 and S2, 4 for "
+  "the correction-validation grid in Table S3, 3 for the fine-grained sweep in Table S4 and 6 for "
+  "the ratio check in Table S6. Intervals, where given, are 2.5th to 97.5th percentiles across "
+  "replications rather than analytic approximations. Bootstrap intervals on the empirical results "
+  "use 1,200 to 1,500 resamples of the pooled out-of-fold predictions.")
+
 doc.save(OUT)
 print("wrote", OUT)

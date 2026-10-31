@@ -484,3 +484,55 @@ def identifiability_demo(n=4000, d=6, n_rep=6, seed=0):
                          mean_gap_B=float(Pb[:, 0].mean() - Ab[:, 0].mean())))
     df = pd.DataFrame(rows)
     return df
+
+
+def prevalence_test(deltas=(0, 1, 2, 3, 4, 6), ratios=(1, 2, 5, 10), n_pos=1200,
+                    d=8, n_rep=6, seed=0):
+    """Does the inflation depend on the presence-to-background ratio?
+
+    Susceptibility studies use ratios from 1:1 to 1:10 and the choice is rarely justified. Since a
+    ratio change alters both the class balance and the effective sample size, it is worth checking
+    that the displacement effect is not an artefact of the 1:1 design used elsewhere here. The null
+    arm is used throughout, so any AUC above 0.5 is attributable to the sampling.
+    """
+    import pandas as pd
+    rows = []
+    for ratio in ratios:
+        for delta in deltas:
+            aucs = []
+            for s in range(n_rep):
+                r = np.random.default_rng(seed + s)
+                n_neg = n_pos * ratio
+                Xp = r.normal(0, 1, size=(n_pos, d))
+                Xa = r.normal(0, 1, size=(n_neg, d))
+                Xa[:, 1] += delta
+                X = np.vstack([Xp, Xa])
+                y = np.r_[np.ones(n_pos, int), np.zeros(n_neg, int)]
+                aucs.append(_fit_auc(X, y, s))
+            a = np.asarray(aucs)
+            rows.append(dict(ratio=f"1:{ratio}", delta=delta, auc=float(a.mean()),
+                             lo=float(np.percentile(a, 2.5)), hi=float(np.percentile(a, 97.5))))
+        got = [r["auc"] for r in rows if r["ratio"] == f"1:{ratio}"]
+        print(f"  1:{ratio:<3} " + "  ".join(f"{v:.3f}" for v in got), flush=True)
+    return pd.DataFrame(rows)
+
+
+def inflation_curve_ci(deltas=(0, 0.5, 1, 1.5, 2, 3, 4, 6), n_rep=20, seed=0, **kw):
+    """The Section 4.1 curve with percentile intervals over independent replications.
+
+    Each replication uses its own seed (0, 1, ... n_rep-1), drawing a fresh dataset and refitting;
+    the interval is the 2.5th to 97.5th percentile across replications, so it reflects the variation
+    a reader would see on re-running rather than an analytic approximation.
+    """
+    import pandas as pd
+    rows = []
+    for delta in deltas:
+        for arm in (True, False):
+            a = np.asarray([simulate(delta, seed=seed + s, informative=arm, **kw)
+                            for s in range(n_rep)])
+            rows.append(dict(delta=delta, arm="informative" if arm else "no skill",
+                             auc=float(a.mean()), sd=float(a.std(ddof=1)),
+                             lo=float(np.percentile(a, 2.5)),
+                             hi=float(np.percentile(a, 97.5)), n_rep=n_rep))
+        print(f"  delta={delta:<4} done", flush=True)
+    return pd.DataFrame(rows)

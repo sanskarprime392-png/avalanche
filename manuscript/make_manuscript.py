@@ -30,6 +30,7 @@ pi = pd.read_csv(os.path.join(RES, "precision_by_inventory.csv"))
 fe = pd.read_csv(os.path.join(RES, "filter_effectiveness.csv"))
 cl = pd.read_csv(os.path.join(RES, "correction_ladder.csv"))
 sc = pd.read_csv(os.path.join(RES, "simulation_curve.csv"))
+sci = pd.read_csv(os.path.join(RES, "simulation_curve_ci.csv"))
 das = pd.read_csv(os.path.join(RES, "design_adjusted_skill.csv"))
 rb = pd.read_csv(os.path.join(RES, "simulation_robustness.csv"))
 th = pd.read_csv(os.path.join(RES, "correction_threshold.csv"))
@@ -333,15 +334,20 @@ P("Before examining any real inventory we establish what a reported AUC can mean
   "null arm the predictors are made independent of the outcome, so true skill is exactly zero by "
   "construction and any AUC above 0.5 must come from the sampling alone.")
 rows = []
-for dl in sorted(sc.delta.unique()):
-    inf = sc[(sc.delta == dl) & (sc.arm == "informative")].auc.iloc[0]
-    nul = sc[(sc.delta == dl) & (sc.arm != "informative")].auc.iloc[0]
-    rows.append([f"{dl:g}", f"{inf:.3f}", f"{nul:.3f}"])
-table(["δ (SD)", "AUC, informative model", "AUC, null model (no skill)"], rows,
-      [1.0, 1.9, 2.0],
-      "Table 1. Reported AUC against absence displacement in synthetic data.")
-P("The null model moves from 0.496 at δ = 0, correctly indicating no skill, to 0.910 at δ = 2 and "
-  "1.000 at δ = 6. A model that has learned nothing can therefore be made to report any AUC up to "
+for dl in sorted(sci.delta.unique()):
+    inf = sci[(sci.delta == dl) & (sci.arm == "informative")].iloc[0]
+    nul = sci[(sci.delta == dl) & (sci.arm == "no skill")].iloc[0]
+    rows.append([f"{dl:g}", f"{inf.auc:.3f} [{inf.lo:.3f}, {inf.hi:.3f}]",
+                 f"{nul.auc:.3f} [{nul.lo:.3f}, {nul.hi:.3f}]"])
+table(["δ (SD)", "AUC, informative model", "AUC, model with no skill"], rows,
+      [0.9, 2.1, 2.1],
+      "Table 1. Reported AUC against absence displacement in synthetic data, with 95% "
+      "percentile intervals over 20 independent replications.")
+P("Every figure is the mean over 20 independent replications, each drawing a fresh dataset and "
+  "refitting, with seeds 0 to 19; intervals are the 2.5th to 97.5th percentiles across those "
+  "replications, so they describe the variation a reader would see on re-running rather than an "
+  "analytic approximation. The null model moves from 0.494 [0.465, 0.522] at δ = 0, correctly "
+  "indicating no skill, to 0.910 [0.888, 0.921] at δ = 2 and 1.000 [0.998, 1.000] at δ = 6. A model that has learned nothing can therefore be made to report any AUC up to "
   "unity purely by choosing where its absences are drawn from. The informative arm is already near "
   "ceiling throughout, so once δ exceeds about 3 the two arms are indistinguishable: beyond that "
   "point a reported AUC cannot separate a model that works from one that does not.")
@@ -361,8 +367,12 @@ P("A synthetic result invites the objection that it reflects the authors' constr
   "settings the null-model AUC differs by at most 0.030 at any displacement, and by 0.001 at "
   "δ = 6. The behaviour is a property of evaluating a presence-only model against constructed "
   "absences, not of this particular simulation.")
-P("Full results for both invariance checks are given in the supplementary material "
-  "(Tables S1 and S2).")
+P("Three further checks are reported in the supplementary material. The behaviour is unchanged "
+  "across learners, predictor counts and sample sizes (Table S1); across displacement directions, "
+  "including displacement partly along the informative axis (Table S2); and across "
+  "presence-to-background ratios from 1:1 to 1:10, where the null-arm AUC varies by at most 0.024 "
+  "at any displacement (Table S6). The ratio check matters because susceptibility studies choose "
+  "that ratio freely and rarely justify it.")
 
 H("4.2 What a reported AUC cannot recover", 2)
 P("The natural response to Section 4.1 is to remove the design's contribution and keep the "
