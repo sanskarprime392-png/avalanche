@@ -374,19 +374,17 @@ P("Three further checks are reported in the supplementary material. The behaviou
   "at any displacement (Table S6). The ratio check matters because susceptibility studies choose "
   "that ratio freely and rarely justify it.")
 
-H("4.2 What a reported AUC cannot recover", 2)
-P("The natural response to Section 4.1 is to remove the design's contribution and keep the "
-  "remainder as the model's. We pursued that and report here why it cannot work, because the reason "
-  "is more informative than the method would have been.")
-P("An AUC is a function of two class-conditional distributions and nothing else. A difference "
-  "between presences and absences enters those distributions identically whether it arises because "
-  "presences are genuinely different terrain or because the absences were drawn from elsewhere. No "
-  "statistic computed from the two samples can attribute it, since the samples are all there is.")
-P("That this bites in practice, and not only in principle, can be shown by construction. Two "
-  "synthetic worlds were built. In the first, predictors are strongly related to true "
-  "susceptibility and absences are drawn from terrain like the presences. In the second, predictors "
-  "are weakly related and absences are drawn from further away. Parameters were chosen so the "
-  "observed clouds nearly coincide.")
+H("4.2 AUC confounds sampling design with predictive skill", 2)
+P("We establish here that a reported AUC confounds two quantities a reader is invited to treat as "
+  "one, and that no statistic computed from presence-only data can separate them. An AUC is a "
+  "function of two class-conditional distributions and nothing else. A difference between presences "
+  "and absences enters those distributions identically whether it arises because presences are "
+  "genuinely different terrain or because the absences were drawn from elsewhere. The two samples "
+  "are all the evidence a study has, so the attribution is unavailable to it.")
+P("The confound is not a theoretical nicety. Two synthetic worlds demonstrate it by construction. "
+  "In the first, predictors are strongly related to true susceptibility and absences are drawn from "
+  "terrain like the presences. In the second, predictors are weakly related and absences are drawn "
+  "from further away. Parameters were chosen so the observed clouds nearly coincide.")
 m = idn.mean(numeric_only=True)
 table(["World", "Observed presence–absence gap", "Reported AUC", "AUC against true absences"],
       [["A  informative predictors, honest absences", f"{m.mean_gap_A:.3f}",
@@ -400,8 +398,8 @@ P(f"The observed separations differ by {abs(m.mean_gap_A - m.mean_gap_B):.3f} an
   f"presence-only study possesses — the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
   "times as much. Data that a study could not tell apart correspond to models that differ "
   "substantially in what a reader cares about.")
-P("Attempts to construct a null baseline from a study's own data fail for the same reason, and we "
-  "report them so the obstacle is not mistaken for an oversight. Generating synthetic classes "
+P("The confound also defeats the obvious remedies, which we report so the obstacle is not "
+  "mistaken for an oversight. Generating synthetic classes "
   "matched to the observed means and covariances yields a baseline of 0.989 for the corrected "
   "configuration, above its own reported AUC, because Gaussian clouds at those moments are easier "
   "to separate than the real data: the construction discards exactly the within-class overlap that "
@@ -611,7 +609,7 @@ P("Neither conventional route to a better score helped. A nested cross-validated
 # ---------------------------------------------------------------- 5 discussion
 H("5. Discussion", 1)
 
-H("5.1 What a reported AUC can and cannot tell a reader", 2)
+H("5.1 What a reported AUC describes", 2)
 P("Susceptibility data are presence-only: the locations of past events are observed, and the "
   "absences are constructed by the analyst. Section 4.1 shows that this construction, not the "
   "model, sets most of the reported score — a model with no skill at all reaches 0.910 at two "
@@ -632,12 +630,12 @@ P("Third — and this is the limit that bites — the part of a reported AUC att
   "absences were drawn, and the samples are all the evidence there is. Any correction, including "
   "the one we attempted, requires assumptions that the data cannot supply.")
 
-H("5.2 A design-sensitivity diagnostic rather than an AUC correction", 2)
-P("What a study can do instead is measure how much its own reported figure depends on a choice it "
-  "made. Holding the presences, the predictors, the model and the evaluation protocol fixed, and "
-  "varying only how absences are drawn, isolates the contribution of the sampling design. The "
-  "result is not a corrected accuracy and should not be reported as one: it is a sensitivity, "
-  "analogous to reporting how a result moves under a plausible alternative specification.")
+H("5.2 Measuring what a study's absence design contributes", 2)
+P("One quantity does remain measurable, and it is the one a study needs. Holding the presences, "
+  "the predictors, the model and the evaluation protocol fixed, and varying only how absences are "
+  "drawn, isolates the contribution of the sampling design to a study's own reported figure. This "
+  "is a sensitivity rather than a corrected accuracy, analogous to reporting how a result moves "
+  "under a plausible alternative specification, and it should be reported as such.")
 P("Three kinds of evaluation must be kept apart, because they answer different questions and this "
   "literature often treats them as one. VERIFIED NON-OCCURRENCE evaluation scores a model against "
   "locations independently established to have had no event; it is the only one that measures what "
@@ -713,11 +711,11 @@ bullets([
     "a model with no skill. Run on an independent inventory, the protocol OBSERVES 1.000. The "
     "agreement is informative but the two figures are different kinds of quantity, and the "
     "simulated one is not an estimate of the real model's skill.",
-    "The absolute skill of a presence-only susceptibility model is not identifiable from the data "
-    "it was fitted to. Two worlds with nearly indistinguishable observed samples differ by 0.281 in "
-    "their ability to rank genuinely susceptible terrain, and no statistic computed from those "
-    "samples can tell them apart. Proposals to correct a reported AUC, including our own, fail for "
-    "this reason rather than for want of a better estimator.",
+    "A reported AUC confounds the contribution of the sampling design with that of the model, and "
+    "the two cannot be separated from presence-only data. Two worlds with nearly indistinguishable "
+    "observed samples differ by 0.281 in their ability to rank genuinely susceptible terrain, and "
+    "no statistic computed from those samples tells them apart. This is why proposals to correct a "
+    "reported AUC fail, including our own.",
     "What is identifiable is the relative effect of the absence design, obtained by holding "
     "presences, predictors and model fixed and varying only how absences are drawn. Any study can "
     "run that comparison on its own pipeline.",
