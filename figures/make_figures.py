@@ -367,3 +367,42 @@ def fig_headroom():
                  "and no post-hoc adjustment recovers it", fontsize=9.5)
     fig.tight_layout()
     savefig(fig, "fig_headroom", outdir=FIGS)
+
+
+def fig_two_worlds():
+    """Nearly identical observable data, very different true skill."""
+    d = pd.read_csv(os.path.join(RES, "identifiability.csv")).mean(numeric_only=True)
+    fig, axs = plt.subplots(1, 2, figsize=(9.0, 4.0))
+
+    labels = ["World A\ninformative predictors,\nhonest absences",
+              "World B\nweak predictors,\ndisplaced absences"]
+    x = np.arange(2)
+
+    obs = [d.reported_A, d.reported_B]
+    axs[0].bar(x, obs, color=CB_PALETTE[0], width=0.5)
+    for i, v in enumerate(obs):
+        axs[0].text(i, v + 0.008, f"{v:.3f}", ha="center", fontsize=10, fontweight="bold")
+    axs[0].set_xticks(x); axs[0].set_xticklabels(labels, fontsize=8)
+    axs[0].set_ylim(0.5, 1.05); axs[0].set_ylabel("AUC")
+    axs[0].set_title("a   What each study would report", fontsize=9.5, loc="left",
+                     fontweight="bold")
+    axs[0].annotate("", xy=(0, 0.60), xytext=(1, 0.60),
+                    arrowprops=dict(arrowstyle="<->", color="0.35", lw=1.1))
+    axs[0].text(0.5, 0.615, f"differ by {abs(d.reported_A-d.reported_B):.3f}",
+                ha="center", fontsize=8.5, color="0.3")
+
+    tru = [d.true_A, d.true_B]
+    axs[1].bar(x, tru, color=[CB_PALETTE[2], CB_PALETTE[1]], width=0.5)
+    for i, v in enumerate(tru):
+        axs[1].text(i, v + 0.008, f"{v:.3f}", ha="center", fontsize=10, fontweight="bold")
+    axs[1].set_xticks(x); axs[1].set_xticklabels(labels, fontsize=8)
+    axs[1].set_ylim(0.5, 1.05); axs[1].set_ylabel("AUC against true non-events")
+    axs[1].set_title("b   What each study is actually worth", fontsize=9.5, loc="left",
+                     fontweight="bold")
+    axs[1].annotate("", xy=(0, 0.60), xytext=(1, 0.60),
+                    arrowprops=dict(arrowstyle="<->", color=CB_PALETTE[1], lw=1.4))
+    axs[1].text(0.5, 0.615, f"differ by {abs(d.true_A-d.true_B):.3f}",
+                ha="center", fontsize=8.5, color=CB_PALETTE[1], fontweight="bold")
+
+    fig.tight_layout()
+    savefig(fig, "fig_two_worlds", outdir=FIGS)

@@ -39,13 +39,14 @@ reproduce on any machine in about 40 minutes with no data download and no Earth 
 
 ```python
 from models.simulation import (inflation_curve, robustness, direction_test,
-                               validate_correction, structured_noise_test,
-                               compare_presence_only, separability_of,
-                               design_adjusted_skill)
+                               identifiability_demo, validate_correction,
+                               structured_noise_test, compare_presence_only,
+                               separability_of)
 
 inflation_curve()           # Table 1, Figure 2  - AUC against absence displacement
 robustness()                # Table 2            - invariance to learner, dimensionality, n
 direction_test(informative=False)   # Table 3    - invariance to displacement direction
+identifiability_demo()      # Table 2, Figure 3  - two worlds, same data, different true skill
 validate_correction()       # Table 5            - where subtraction fails, by data structure
 structured_noise_test()     # Table 6            - structured label contamination
 compare_presence_only()     # Table 7            - PU and one-class comparison
@@ -55,7 +56,7 @@ compare_presence_only()     # Table 7            - PU and one-class comparison
 Expect small differences only if scikit-learn's RandomForest implementation changes between
 versions; the direction of every result is insensitive to this.
 
-Table 4 and Figure 4 come from `correction_threshold.csv`, produced by the fine-grained sweep in
+Table 4 and Figure 5 come from `correction_threshold.csv`, produced by the fine-grained sweep in
 the same module (`null_baseline` across δ with `_make`/`_auc`).
 
 ---

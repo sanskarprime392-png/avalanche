@@ -7,6 +7,8 @@ import pandas as pd
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 DATA = r"C:\Users\Sanskar\Documents\avalanche_data"
@@ -95,6 +97,43 @@ def table(headers, rows, widths, caption=None):
     return t
 
 
+def box(title, items, width=6.3):
+    """A shaded, bordered single-cell panel holding a numbered list of recommendations."""
+    t = doc.add_table(rows=1, cols=1)
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+    cell = t.rows[0].cells[0]
+    cell.width = Inches(width)
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear")
+    shd.set(qn("w:fill"), "F2F6F9")
+    tcPr.append(shd)
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("top", "left", "bottom", "right"):
+        e = OxmlElement(f"w:{edge}")
+        e.set(qn("w:val"), "single")
+        e.set(qn("w:sz"), "18" if edge == "left" else "4")
+        e.set(qn("w:color"), "0B3D5C" if edge == "left" else "9BB4C4")
+        borders.append(e)
+    tcPr.append(borders)
+
+    head = cell.paragraphs[0]
+    r = head.add_run(title)
+    r.bold = True
+    r.font.size = Pt(10.5)
+    r.font.color.rgb = NAVY
+    for i, (lead, rest) in enumerate(items, 1):
+        q = cell.add_paragraph()
+        q.paragraph_format.space_before = Pt(5)
+        q.paragraph_format.space_after = Pt(0)
+        a = q.add_run(f"{i}.  {lead}  ")
+        a.bold = True
+        a.font.size = Pt(10)
+        b = q.add_run(rest)
+        b.font.size = Pt(10)
+    doc.add_paragraph()
+
+
 def figure(name, caption, width=6.0):
     p = os.path.join(FIGS, name + ".png")
     if not os.path.exists(p):
@@ -150,44 +189,22 @@ a_xgb = ld[(ld.config == "A") & (ld.model == "xgb")].roc_auc.iloc[0]
 b_xgb = ld[(ld.config == "B") & (ld.model == "xgb")].roc_auc.iloc[0]
 c_xgb = ld[(ld.config == "C") & (ld.model == "xgb")].roc_auc.iloc[0]
 P(
-    "Machine-learning susceptibility maps for snow avalanches, landslides and related geohazards "
-    "routinely report areas under the ROC curve above 0.90, and those values are used to compare "
-    "models, select predictors and justify operational products. Because such data are "
-    "presence-only, the absences are invented by the analyst, and we show that this choice, rather "
-    "than the model, largely determines the reported score. In synthetic data where absences are "
-    "displaced from presences along a direction carrying no information about the outcome, a model "
-    "with NO predictive skill whatsoever reports AUC 0.739 at a displacement of one standard "
-    "deviation, 0.910 at two and 1.000 at six. Reported AUC is therefore not comparable across "
-    "studies that chose their absences differently, and above a displacement of about three "
-    "standard deviations it cannot distinguish a model that works from one that does not."
-    " "
-    "We measure the absence designs of a published avalanche susceptibility protocol and of two "
-    "corrected alternatives on the same scale, using an independent Sentinel-1 inventory of 6,364 "
-    "candidate release sites in the Chandra-Bhaga and Upper Beas basins of the Western Himalaya. "
-    "Drawing absences from flat, vegetated, urban and cropland terrain, as this literature does, "
-    "places them 7.06 standard deviations from the presences, where the simulation predicts that a "
-    "null model scores 1.000 — and 1.000 is what the protocol returns on real data."
-    " "
-    "We then show that the absolute skill of a presence-only model is not identifiable from the "
-    "data it was fitted to. Two synthetic worlds were constructed whose observed presence and "
-    "absence samples are nearly indistinguishable — their separations differ by 0.02 and their "
-    "reported AUCs by 0.043 — while their ability to rank genuinely susceptible terrain differs by "
-    "0.281. A difference between the two samples enters an AUC identically whether it arises "
-    "because presences are different terrain or because absences were drawn from elsewhere, so no "
-    "statistic computed from those samples can attribute it. We report our own failed attempts at a "
-    "correction for the same reason."
-    " "
-    "What remains identifiable is the relative effect of the absence design, obtained by holding "
-    "presences, predictors and model fixed and varying only the sampling: the published protocol "
-    "returns 1.000, terrain-matched absences 0.954, and aspect-matched absences with corrected "
-    "labels 0.866. Training on displaced absences and scoring against a reference set of true "
-    "non-events — available in simulation, where the generating process is known — shows the model "
-    "itself is little harmed, falling only from 0.975 to 0.952; what the design corrupts is the "
-    "figure a study reports about itself. Two further diagnostics agree: 1 km climate and "
-    "500 m snow-cover predictors are statistically interchangeable with raw spatial coordinates, "
-    "and reported AUC rises with the background sampling ratio while precision-recall performance "
-    "falls. We recommend that susceptibility studies hold out an evaluation set whose absences are "
-    "drawn like the presences; code and data are released.")
+    "Machine-learning susceptibility maps for snow avalanches and related geohazards routinely "
+    "report AUC above 0.90. Because such data are presence-only, the "
+    "absences are invented by the analyst, and we show that this choice, not the model, "
+    "largely determines the reported score. In synthetic data where absences are displaced from "
+    "presences along an uninformative direction, a model with no predictive skill reports AUC "
+    "0.739 at one standard deviation, 0.910 at two and 1.000 at six. On an "
+    "independent Sentinel-1 inventory of 6,364 candidate release sites in the Western Himalaya, a "
+    "published avalanche protocol places its absences 7.06 standard deviations away and returns "
+    "1.000. We further show that the absolute "
+    "skill of a presence-only model is not identifiable from the data it was fitted to: two "
+    "constructed worlds whose observed samples differ in reported AUC by 0.043 differ in true "
+    "ranking ability by 0.281, and no statistic from those samples can attribute the difference. "
+    "What remains identifiable is the relative effect of the design. Holding "
+    "presences, predictors and model fixed, reported AUC falls from 1.000 to 0.954 with "
+    "terrain-matched absences and 0.866 with aspect-matched absences and corrected labels. We "
+    "recommend that studies report this range, and release a tool that computes it.")
 P("Keywords: susceptibility mapping, pseudo-absence selection, sampling bias, model evaluation, "
   "presence-only data, snow avalanches, Sentinel-1, Western Himalaya", italic=True, size=9.5)
 
@@ -398,6 +415,11 @@ P(f"The observed separations differ by {abs(m.mean_gap_A - m.mean_gap_B):.3f} an
   f"presence-only study possesses — the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
   "times as much. Data that a study could not tell apart correspond to models that differ "
   "substantially in what a reader cares about.")
+figure("fig_two_worlds",
+       "Figure 3. The same observable data, two different models. Panel a shows what each study "
+       "would report from the sample it has. Panel b shows how well each model actually ranks "
+       "true non-events, which no presence-only study can measure. A reader comparing published "
+       "AUCs is reading panel a and inferring panel b.", 6.4)
 P("The confound also defeats the obvious remedies, which we report so the obstacle is not "
   "mistaken for an oversight. Generating synthetic classes "
   "matched to the observed means and covariances yields a baseline of 0.989 for the corrected "
@@ -507,7 +529,7 @@ P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully
   f"{abs(float(cl.delta.iloc[4])):.3f}, roughly six times as much. Inventory precision is not "
   "reported at all in the studies we reproduce, so this term is invisible in published work.")
 figure("fig_correction_ladder",
-       "Figure 3. Cumulative effect of each correction. Label quality removes more apparent skill "
+       "Figure 4. Cumulative effect of each correction. Label quality removes more apparent skill "
        "than sampling design and spatial validation combined.")
 
 H("4.6 Where reported performance comes from", 2)
@@ -537,7 +559,7 @@ P(f"Configuration A, which reproduces published practice, achieves AUC = {a_xgb:
   f"changes performance by {a_xgb - b_xgb:+.3f}. The optimism is therefore attributable to sampling "
   "design, and essentially not at all to spatial autocorrelation.")
 figure("fig_leakage_decomposition",
-       "Figure 4. Decomposition of reported performance. Paper-style absences produce perfect "
+       "Figure 5. Decomposition of reported performance. Paper-style absences produce perfect "
        "separation regardless of the cross-validation scheme.")
 
 P("This result does not depend on the quality of our inventory. Repeating the contrast at four "
@@ -554,7 +576,7 @@ table(["Recurrence", "n presence", "A (paper)", "D (matched)", "Difference"], ro
       [1.0, 1.1, 1.1, 1.2, 1.1],
       "Table 7. Sensitivity of the decomposition to inventory confidence.")
 figure("fig_label_sensitivity",
-       "Figure 5. The sampling artefact is independent of inventory size and label confidence.")
+       "Figure 6. The sampling artefact is independent of inventory size and label confidence.")
 
 H("4.7 Coarse predictors encode geography, not snowpack", 2)
 rows = [[r.variant, int(r.n_features), f"{r.roc_auc:.3f}", f"[{r.ci_low:.3f}, {r.ci_high:.3f}]"]
@@ -570,7 +592,7 @@ P(f"Substituting the 1 km climate, 500 m snow-cover and distance-to-fault layers
   "surfaces across release zones of 10²–10⁵ m². Published importance rankings that place snow-cover "
   "duration among the leading predictors may therefore be describing a geographic index rather "
   "than snowpack process.")
-figure("fig_geography_ablation", "Figure 6. Coarse predictors are interchangeable with coordinates.", 6.4)
+figure("fig_geography_ablation", "Figure 7. Coarse predictors are interchangeable with coordinates.", 6.4)
 
 H("4.8 Reported AUC depends on the background sampling ratio", 2)
 rows = [[r.ratio, f"{r.prevalence:.3f}", f"{r.roc_auc:.3f}", f"{r.pr_auc:.3f}", f"{r.brier:.4f}"]
@@ -647,11 +669,20 @@ P("Three kinds of evaluation must be kept apart, because they answer different q
   "discriminative power, as Section 4.4 shows. Matched background evaluation is an improvement on "
   "mismatched background evaluation; it is not ground truth, and describing it as such would "
   "reproduce in a different form the conflation this paper is about.")
-P("Concretely, we suggest four things. Report the absence rule explicitly, in enough detail that "
-  "it could be reimplemented. Run the same pipeline under at least two defensible absence designs "
-  "and report the range of AUC obtained. State which of the three evaluations above a reported "
-  "figure represents. And treat a large spread across designs as what it is — evidence that the "
-  "headline number describes the experiment rather than the model.")
+P("Four practices follow, and none of them requires a new statistic.")
+box("What a susceptibility study should report",
+    [("State the absence rule.",
+      "In enough detail that another group could reimplement it — the geographic pool, the "
+      "exclusion criteria, the ratio to presences, and whether any matching was applied."),
+     ("Report a range, not a number.",
+      "Run the same pipeline under at least two defensible absence designs and give the AUC "
+      "obtained under each. The spread belongs in the abstract alongside the headline figure."),
+     ("Say which evaluation the figure is.",
+      "Verified non-occurrence, matched background, or presence-only. These answer different "
+      "questions and a reader cannot tell them apart from an AUC."),
+     ("Read a large spread as a warning.",
+      "A range comparable to or wider than the differences between competing models means the "
+      "headline number describes the experiment rather than the model.")])
 P("On the data used here that spread is 0.031 across four absence designs, from 0.923 with "
   "absences matched on slope to 0.954 with absences drawn at random from the candidate pool, which "
   "is the common default. That range is wider than the differences typically reported between "
@@ -695,6 +726,17 @@ bullets([
     "in the companion paper. Because every configuration compared here uses identical labels, "
     "label quality affects all arms equally and cannot produce the differences reported, as the "
     "sensitivity analysis in Section 4.3 confirms.",
+    "Independent verification of the inventory is limited by image cadence rather than by image "
+    "resolution. High-resolution optical archives carry sub-metre detail but revisit a given "
+    "mountain scene irregularly and often years apart: for a detection dated to February–March "
+    "2021 in this study area, the nearest archived high-resolution coverage predates the event by "
+    "roughly eighteen months, which cannot distinguish a deposit from any other change in that "
+    "interval. Avalanche deposits persist for weeks, so verification requires imagery bracketing "
+    "the event within that window, and the archives that offer such density are the radar and "
+    "moderate-resolution optical missions already used to make the detections. This is a general "
+    "obstacle to validating SAR avalanche inventories against independent imagery, not a "
+    "limitation of this study's access, and it is why occurrence records or multi-rater "
+    "interpretation remain the practical routes to label validation.",
 ])
 
 # ---------------------------------------------------------------- 6 conclusions
