@@ -328,7 +328,7 @@ def fig_adjusted_skill():
     axs[0].set_ylim(0.5, 1.07)
     axs[0].set_ylabel("ROC-AUC")
     axs[0].legend(fontsize=7.5, loc="lower left")
-    axs[0].set_title("a   What is reported", fontsize=9.5, loc="left", fontweight="bold")
+    axs[0].set_title("(a)   What is reported", fontsize=9.5, loc="left", fontweight="bold")
 
     cols = [CB_PALETTE[1] if v < 0.01 else CB_PALETTE[2] for v in d.adjusted_skill]
     axs[1].bar(x, d.adjusted_skill, color=cols, width=0.55)
@@ -338,7 +338,7 @@ def fig_adjusted_skill():
     axs[1].set_xticklabels(short, fontsize=8)
     axs[1].set_ylim(-0.01, 0.135)
     axs[1].set_ylabel("AUC above the null model at the same δ")
-    axs[1].set_title("b   What the model actually contributes", fontsize=9.5, loc="left",
+    axs[1].set_title("(b)   What the model actually contributes", fontsize=9.5, loc="left",
                      fontweight="bold")
     fig.tight_layout()
     savefig(fig, "fig_adjusted_skill", outdir=FIGS)
@@ -384,7 +384,7 @@ def fig_two_worlds():
         axs[0].text(i, v + 0.008, f"{v:.3f}", ha="center", fontsize=10, fontweight="bold")
     axs[0].set_xticks(x); axs[0].set_xticklabels(labels, fontsize=8)
     axs[0].set_ylim(0.5, 1.05); axs[0].set_ylabel("AUC")
-    axs[0].set_title("a   What each study would report", fontsize=9.5, loc="left",
+    axs[0].set_title("(a)   What each study would report", fontsize=9.5, loc="left",
                      fontweight="bold")
     axs[0].annotate("", xy=(0, 0.60), xytext=(1, 0.60),
                     arrowprops=dict(arrowstyle="<->", color="0.35", lw=1.1))
@@ -397,7 +397,7 @@ def fig_two_worlds():
         axs[1].text(i, v + 0.008, f"{v:.3f}", ha="center", fontsize=10, fontweight="bold")
     axs[1].set_xticks(x); axs[1].set_xticklabels(labels, fontsize=8)
     axs[1].set_ylim(0.5, 1.05); axs[1].set_ylabel("AUC against true non-events")
-    axs[1].set_title("b   What each study is actually worth", fontsize=9.5, loc="left",
+    axs[1].set_title("(b)   What each study is actually worth", fontsize=9.5, loc="left",
                      fontweight="bold")
     axs[1].annotate("", xy=(0, 0.60), xytext=(1, 0.60),
                     arrowprops=dict(arrowstyle="<->", color=CB_PALETTE[1], lw=1.4))

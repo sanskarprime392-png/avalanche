@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Assemble the manuscript from the actual result files — no placeholder numbers."""
+"""Assemble the manuscript from the actual result files – no placeholder numbers."""
 import os
 
 import numpy as np
@@ -69,6 +69,48 @@ def bullets(items):
         doc.add_paragraph(i, style="List Bullet")
 
 
+def _plain_rules(t):
+    """NHESS: horizontal lines above and below the table and between header and body only."""
+    for i, row in enumerate(t.rows):
+        for cell in row.cells:
+            tcPr = cell._tc.get_or_add_tcPr()
+            for old in tcPr.findall(qn("w:tcBorders")):
+                tcPr.remove(old)
+            b = OxmlElement("w:tcBorders")
+            for edge in ("top", "left", "bottom", "right"):
+                e = OxmlElement(f"w:{edge}")
+                on = (edge == "top" and i <= 1) or (edge == "bottom" and i == len(t.rows) - 1)
+                e.set(qn("w:val"), "single" if on else "nil")
+                if on:
+                    e.set(qn("w:sz"), "8" if i == 0 or i == len(t.rows) - 1 else "4")
+                    e.set(qn("w:color"), "000000")
+                b.append(e)
+            tcPr.append(b)
+
+
+def _review_furniture():
+    """Line numbers and page numbers, both required on a Copernicus review PDF."""
+    sectPr = doc.sections[0]._sectPr
+    ln = OxmlElement("w:lnNumType")
+    ln.set(qn("w:countBy"), "1")
+    ln.set(qn("w:restart"), "continuous")
+    ln.set(qn("w:distance"), "360")
+    sectPr.append(ln)
+
+    para = doc.sections[0].footer.paragraphs[0]
+    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = para.add_run()
+    for instr, kind in ((None, "begin"), ("PAGE", "instrText"), (None, "end")):
+        e = OxmlElement("w:" + kind)
+        if kind == "instrText":
+            e.set(qn("xml:space"), "preserve")
+            e.text = " PAGE "
+        else:
+            e.set(qn("w:fldCharType"), kind)
+        r._r.append(e)
+    r.font.size = Pt(9)
+
+
 def table(headers, rows, widths, caption=None):
     if caption:
         c = doc.add_paragraph()
@@ -76,7 +118,7 @@ def table(headers, rows, widths, caption=None):
         rr.bold = True
         rr.font.size = Pt(9.5)
     t = doc.add_table(rows=1, cols=len(headers))
-    t.style = "Light Grid Accent 1"
+    t.style = "Table Grid"
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
     for j, h in enumerate(headers):
         cell = t.rows[0].cells[j]
@@ -93,6 +135,7 @@ def table(headers, rows, widths, caption=None):
     for row in t.rows:
         for j, w in enumerate(widths):
             row.cells[j].width = Inches(w)
+    _plain_rules(t)
     doc.add_paragraph()
     return t
 
@@ -221,7 +264,7 @@ P("Such values are only meaningful if the negative class represents terrain wher
   "release zones in nearly every predictor simultaneously, so a classifier can achieve excellent "
   "scores by recognising land cover rather than avalanche conditions. The field has meanwhile "
   "concentrated its methodological attention on spatial cross-validation, which addresses a "
-  "different problem — spatial autocorrelation between training and test folds.")
+  "different problem – spatial autocorrelation between training and test folds.")
 P("This study asks which of these two design choices actually drives reported performance, and "
   "whether the resulting models encode avalanche physics or study-design artefacts. We address it "
   "with a controlled 2×2 experiment on an independently constructed inventory, followed by "
@@ -232,7 +275,7 @@ P("What is under test here is a PROTOCOL, not a paper. The absence rule examined
   "throughout avalanche susceptibility work in the region: the study we reproduce cites earlier "
   "applications reporting AUC values of 0.88 and 0.87 built the same way. Our results therefore "
   "speak to a convention the field has inherited, and they apply to our own models exactly as they "
-  "apply to published ones — Section 4.1 reports what happens when we run the conventional protocol "
+  "apply to published ones – Section 4.1 reports what happens when we run the conventional protocol "
   "on our own data, and the answer is a perfect score.")
 P("We take Abhinav and Sattar (2025) as the reference implementation because it is recent, it covers "
   "these basins, and it documents its predictors, models and sampling clearly enough to be rebuilt "
@@ -252,8 +295,8 @@ P("The Chandra-Bhaga and Upper Beas basins lie in Himachal Pradesh and the Jammu
 P("All analysis is carried out over a rectangular extent covering both basins, 76.40–78.10° E and "
   "31.90–33.20° N, rather than over hydrologically delineated basin outlines. The extent therefore "
   "includes some terrain beyond the two catchments, and spans 554–6,565 m against the 1,123–6,329 m "
-  "usually quoted for the basins themselves. Potential release terrain — slope between 28 and 60°, "
-  "after Bühler et al. (2018) — covers 11,705 km², roughly half the extent, and every areal "
+  "usually quoted for the basins themselves. Potential release terrain – slope between 28 and 60°, "
+  "after Bühler et al. (2018) – covers 11,705 km², roughly half the extent, and every areal "
   "statistic reported in Section 4 refers to that domain rather than to the full rectangle.")
 figure("fig_study_area",
        "Figure 1. The analysis extent, with elevation over hillshade and the settlements and passes "
@@ -310,8 +353,8 @@ P("Four slope windows appear in the workflow and they are deliberately different
   "map is masked to 28–60°, the potential-release-area definition of Bühler et al. (2018), so that "
   "areal statistics are comparable with other studies using that convention.")
 P("The background window sets the separability of the absence design directly, so the result was "
-  "recomputed across four alternatives. Reported AUC moves with the choice — 0.844 at 20–60°, "
-  "0.866 at 25–55°, 0.873 at 28–60° and 0.875 at 30–50° — a range of 0.031 produced by a decision "
+  "recomputed across four alternatives. Reported AUC moves with the choice – 0.844 at 20–60°, "
+  "0.866 at 25–55°, 0.873 at 28–60° and 0.875 at 30–50° – a range of 0.031 produced by a decision "
   "about which terrain counts as comparable, with the presences, predictors and model unchanged. "
   "This is the paper's argument appearing within a single study: a defensible-looking choice moves "
   "the reported number by more than the gap between several published models. The 25–55° window is "
@@ -374,7 +417,7 @@ figure("fig_inflation_law",
 P("Measuring the three real designs used in this study on the same scale places the published "
   f"protocol at δ = {das.delta.iloc[0]:.2f}, terrain-matched absences at δ = {das.delta.iloc[1]:.2f}, "
   f"and terrain-and-aspect matching with corrected labels at δ = {das.delta.iloc[2]:.2f}. At δ = "
-  "7.06 the simulation predicts that even a model with no information scores 1.000 — and 1.000 is "
+  "7.06 the simulation predicts that even a model with no information scores 1.000 – and 1.000 is "
   "what the published protocol returns on real data (Section 4.2). The artefact is therefore not "
   "incidental to one dataset; it is the expected consequence of the design.")
 
@@ -411,8 +454,8 @@ table(["World", "Observed presence–absence gap", "Reported AUC", "AUC against 
       [2.5, 1.7, 1.0, 1.4],
       "Table 2. Two worlds with nearly identical observable data and different true skill.")
 P(f"The observed separations differ by {abs(m.mean_gap_A - m.mean_gap_B):.3f} and the reported AUCs "
-  f"by {abs(m.reported_A - m.reported_B):.3f}. Measured against true absences — which no "
-  f"presence-only study possesses — the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
+  f"by {abs(m.reported_A - m.reported_B):.3f}. Measured against true absences – which no "
+  f"presence-only study possesses – the two differ by {abs(m.true_A - m.true_B):.3f}, roughly six "
   "times as much. Data that a study could not tell apart correspond to models that differ "
   "substantially in what a reader cares about.")
 figure("fig_two_worlds",
@@ -426,14 +469,14 @@ P("The confound also defeats the obvious remedies, which we report so the obstac
   "configuration, above its own reported AUC, because Gaussian clouds at those moments are easier "
   "to separate than the real data: the construction discards exactly the within-class overlap that "
   "makes the real problem hard. Resampling real rows within each class preserves the signal intact "
-  "and is therefore not a null at all. Nor is the separability measure canonical — for the "
+  "and is therefore not a null at all. Nor is the separability measure canonical – for the "
   f"published protocol the diagonal form gives {en.delta_diag.iloc[0]:.2f} standard deviations and "
   f"the Mahalanobis form {en.delta_maha.iloc[0]:.2f}, so a baseline read off a δ axis inherits the "
   "choice of measure.")
 P("Two failed constructions do not establish that every conceivable null must fail, and we do not "
   "claim a general impossibility theorem. What the two-world construction establishes is sharper "
-  "and sufficient: under the observational setup a presence-only study actually has — the presence "
-  "sample, the absence sample, and the predictors — two models whose true skill differs by 0.281 "
+  "and sufficient: under the observational setup a presence-only study actually has – the presence "
+  "sample, the absence sample, and the predictors – two models whose true skill differs by 0.281 "
   "can produce data a study could not tell apart. Any correction must therefore import information "
   "from outside that setup, such as verified true absences or a second independently designed "
   "absence set. Stating the null hypothesis precisely matters here: we test the hypothesis that "
@@ -456,7 +499,7 @@ P("Every configuration compared here uses identical labels, which controls for l
   "on elevation, this error structure is correlated with a variable the sampling design acts on, "
   "and the assumption that labels affect all designs equally cannot simply be asserted.")
 P("We therefore tested it. A fraction of synthetic presences was replaced by points drawn from the "
-  "low end of the informative axis — the analogue of melt-out false positives at low elevation — "
+  "low end of the informative axis – the analogue of melt-out false positives at low elevation – "
   "and the displacement curve recomputed.")
 piv = sn.pivot(index="noise_rate", columns="delta", values="auc")
 rows = [[f"{int(100*i)}%"] + [f"{piv.loc[i, c]:.3f}" for c in piv.columns] for i in piv.index]
@@ -466,7 +509,7 @@ table(["Contaminated presences"] + [f"δ={c:g}" for c in piv.columns], rows,
 P("At δ = 0 contamination matters a great deal: reported AUC falls from 0.979 to 0.629 as the "
   "contaminated fraction rises to 80%. By δ = 3 the spread across contamination rates is 0.019, and "
   "by δ = 6 it is 0.001. At the separability of the published protocol an inventory that is 80% "
-  "false positives reports the same value as a clean one — the displacement overwhelms the label "
+  "false positives reports the same value as a clean one – the displacement overwhelms the label "
   "quality entirely. Structured label error therefore cannot account for the inflation result; if "
   "anything it sharpens it, since at high separability the reported score ceases to respond to "
   "label quality at all.")
@@ -524,8 +567,8 @@ P(f"The conventional protocol returns AUC {cl.roc_auc.iloc[0]:.3f} and the fully
   f"configuration {cl.roc_auc.iloc[-1]:.3f}, a difference of "
   f"{cl.roc_auc.iloc[0]-cl.roc_auc.iloc[-1]:.3f}. The largest single term is not the one the field "
   "has concentrated on. Spatial cross-validation, the standard methodological correction in this "
-  f"literature, accounts for {abs(float(cl.delta.iloc[2])):.3f}; label quality — removing melt-out "
-  "false positives and deriving release points without an extreme-value rule — accounts for "
+  f"literature, accounts for {abs(float(cl.delta.iloc[2])):.3f}; label quality – removing melt-out "
+  "false positives and deriving release points without an extreme-value rule – accounts for "
   f"{abs(float(cl.delta.iloc[4])):.3f}, roughly six times as much. Inventory precision is not "
   "reported at all in the studies we reproduce, so this term is invisible in published work.")
 figure("fig_correction_ladder",
@@ -537,8 +580,8 @@ P("The decomposition below and the ladder in Section 4.5 use DIFFERENT LABEL SET
   "for figures that otherwise appear inconsistent. The decomposition isolates the effect of "
   "absence sampling and cross-validation alone, so it holds the labels at the recurrence ≥ 4 "
   "inventory throughout and reaches 0.939 under terrain-matched absences with spatial-block "
-  "validation. The ladder continues past that point by also correcting the labels — applying the "
-  "melt-out filter and centroid-derived release points — which is what takes configuration C2 to "
+  "validation. The ladder continues past that point by also correcting the labels – applying the "
+  "melt-out filter and centroid-derived release points – which is what takes configuration C2 to "
   "0.841. The 0.098 between them is the cost of the label correction, reported as the final rung "
   "of the ladder, and is not a disagreement between the two tables.")
 rows = []
@@ -564,7 +607,7 @@ figure("fig_leakage_decomposition",
 
 P("This result does not depend on the quality of our inventory. Repeating the contrast at four "
   "recurrence thresholds, configuration A remains at AUC 1.000 throughout, including at n = 240 "
-  "presence points — comparable to the 118 points used in the reference study.")
+  "presence points – comparable to the 118 points used in the reference study.")
 rows = []
 for mr in sorted(ls.min_recurrence.unique()):
     A = ls[(ls.min_recurrence == mr) & (ls.config == "A")]
@@ -610,13 +653,13 @@ P(f"Increasing the background ratio from 1:1 to 1:10 raises AUC from {br.roc_auc
 H("4.9 What improves a corrected model, and what does not", 2)
 P("Having removed the sources of inflation, we asked what genuinely raises performance. Four "
   "interventions were tried on the corrected inventory and evaluated identically.")
-rows = [[r.attempt, f"{r.auc:.3f}", ("—" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
+rows = [[r.attempt, f"{r.auc:.3f}", ("–" if pd.isna(r.delta) else f"{r.delta:+.3f}"), r.helped]
         for _, r in ia.iterrows()]
 table(["Intervention", "AUC", "Δ", "Helped"], rows, [3.0, 0.7, 0.7, 0.7],
       "Table 10. Interventions tested on the corrected model (XGBoost, spatial-block CV).")
 P("Terrain described at the scale of the process is what helps. A 30 m cell is smaller than the "
   "feature that decides whether a slope releases, so mean slope, topographic position and roughness "
-  "were recomputed over 90, 300 and 900 m neighbourhoods — slab, start-zone and face scale. Those "
+  "were recomputed over 90, 300 and 900 m neighbourhoods – slab, start-zone and face scale. Those "
   "nine predictors add 0.025 AUC and 0.058 recall. Restoring TPI adds a further 0.005: its earlier "
   "dominance was an artefact of the highest-pixel release rule, and once release points are taken "
   "as the centroid of release-angle terrain the presence-to-background gap falls from +33.5 to "
@@ -634,7 +677,7 @@ H("5. Discussion", 1)
 H("5.1 What a reported AUC describes", 2)
 P("Susceptibility data are presence-only: the locations of past events are observed, and the "
   "absences are constructed by the analyst. Section 4.1 shows that this construction, not the "
-  "model, sets most of the reported score — a model with no skill at all reaches 0.910 at two "
+  "model, sets most of the reported score – a model with no skill at all reaches 0.910 at two "
   "standard deviations of absence displacement and 1.000 at six. Section 4.2 shows that the "
   "contribution cannot be removed after the fact. Three consequences follow, and none is specific "
   "to avalanches.")
@@ -646,7 +689,7 @@ P("First, AUC is not comparable between studies that drew their absences differe
 P("Second, above roughly three standard deviations of separation the measure saturates and stops "
   "discriminating: in the simulation a model with genuine skill and a model with none both report "
   "values above 0.97. Much of the published literature appears to operate in that regime.")
-P("Third — and this is the limit that bites — the part of a reported AUC attributable to the model "
+P("Third – and this is the limit that bites – the part of a reported AUC attributable to the model "
   "cannot be recovered by arithmetic. A difference between the presence and absence samples enters "
   "the statistic identically whether it arises from genuine terrain differences or from where the "
   "absences were drawn, and the samples are all the evidence there is. Any correction, including "
@@ -672,7 +715,7 @@ P("Three kinds of evaluation must be kept apart, because they answer different q
 P("Four practices follow, and none of them requires a new statistic.")
 box("What a susceptibility study should report",
     [("State the absence rule.",
-      "In enough detail that another group could reimplement it — the geographic pool, the "
+      "In enough detail that another group could reimplement it – the geographic pool, the "
       "exclusion criteria, the ratio to presences, and whether any matching was applied."),
      ("Report a range, not a number.",
       "Run the same pipeline under at least two defensible absence designs and give the AUC "
@@ -699,8 +742,8 @@ P("Two artefacts of our own are reported because the argument demands it. SHAP a
   "+3.8 and made the predictor ordinary again.")
 P("The second concerns the optical verification used to establish label quality for the corrected "
   "configuration. An unaided first pass over 100 detections accepted 24 as avalanches; re-scoring "
-  "against an explicit rule — snow present beforehand, a localized rough feature appearing, "
-  "surroundings unchanged — rejected 21 of those, most because the slope was bare rock before the "
+  "against an explicit rule – snow present beforehand, a localized rough feature appearing, "
+  "surroundings unchanged – rejected 21 of those, most because the slope was bare rock before the "
   "event and acquired snow afterwards. Both scorings are reported in the companion paper, and the "
   "disagreement between them (Cohen's kappa 0.49) is treated there as a result rather than an "
   "embarrassment. Neither artefact changes the findings above, which compare sampling designs "
@@ -712,8 +755,8 @@ bullets([
     "The simulation establishes that absence displacement inflates AUC and characterises how the "
     "inflation behaves. It is not a calibration: Section 4.2 withdraws the proposal to read a "
     "baseline off it and subtract that from a real study's figure, and the simulated values should "
-    "not be used that way. The construction also simplifies real predictor structure — spatial "
-    "clustering, covariance and non-Gaussian marginals are all idealised — though the invariance "
+    "not be used that way. The construction also simplifies real predictor structure – spatial "
+    "clustering, covariance and non-Gaussian marginals are all idealised – though the invariance "
     "checks in the supplementary material show the qualitative behaviour survives each of these.",
     "The separability measure aggregates standardised differences across predictors and therefore "
     "depends on which predictors a study uses. Two studies with identical absence rules but "
@@ -775,14 +818,15 @@ bullets([
     "ground truth.",
 ])
 
-H("Data and code availability", 1)
+H("Code and data availability", 1)
 P("The design comparison this paper recommends is packaged as designcheck.py in the repository, "
   "which runs independently of the rest of the code. Given a table of predictor values at event "
   "locations and a pool of candidate absence locations, it scores one model against several "
   "absence designs and reports the spread, so any presence-only susceptibility study can measure "
   "how much of its reported figure the sampling accounts for. Supplementary Section S5 gives a "
   "worked example on the data used here.")
-P("All code is openly available at https://github.com/sanskarprime392-png/avalanche. The avalanche "
+P("All code is openly available at https://github.com/sanskarprime392-png/avalanche and is archived "
+  "at Zenodo under DOI [ZENODO DOI], which is the version underlying the results reported here. The avalanche "
   "inventory derived in this study, the trained susceptibility rasters and all result tables are "
   "reproducible from that repository using openly licensed input data (NASADEM, Sentinel-1, "
   "Sentinel-2, WorldClim, MODIS, ESA WorldCover, OpenStreetMap, GEM Global Active Faults).")
@@ -792,15 +836,19 @@ P("S.G. designed the study, built the Sentinel-1 inventory, carried out the anal
   "optical verification, and wrote the manuscript.")
 
 H("Competing interests", 1)
-P("The author declares no competing interests.")
+P("The author declares that they have no conflict of interest.")
 
 H("Acknowledgements", 1)
-P("The controlled decomposition in Section 4.1 — separating the contribution of absence sampling "
-  "from that of spatial autocorrelation — was proposed in review by [SUPERVISOR NAME], whose "
+P("The controlled decomposition in Section 4.1 – separating the contribution of absence sampling "
+  "from that of spatial autocorrelation – was proposed in review by [SUPERVISOR NAME], whose "
   "comments also shaped the treatment of coarse-resolution predictors in Section 4.5. Analysis "
   "code was developed with the assistance of a large language model; the author designed the "
   "study, directed the analysis, performed the verification, and is responsible for all results "
-  "and conclusions. This work received no specific funding.")
+  "and conclusions.")
+
+H("Financial support", 1)
+P("This research received no specific grant from any funding agency in the public, commercial "
+  "or not-for-profit sectors.")
 
 H("References", 1)
 for i, r in enumerate([
@@ -875,5 +923,6 @@ for i, r in enumerate([
 ], 1):
     doc.add_paragraph(f"[{i}]  {r}", style="List Paragraph")
 
+_review_furniture()
 doc.save(OUT)
 print("wrote", OUT)
